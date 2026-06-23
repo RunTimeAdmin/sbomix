@@ -1,0 +1,31 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB:       packrai
+      POSTGRES_USER:     packrai
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./src/api/schema.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test:     ["CMD-SHELL", "pg_isready -U packrai"]
+      interval: 5s
+      timeout:  5s
+      retries:  5
+
+  api:
+    build: .
+    ports:
+      - "${PORT:-3080}:3080"
+    environment:
+      DATABASE_URL: postgres://packrai:${POSTGRES_PASSWORD:-changeme}@db:5432/packrai
+      ADMIN_KEY:    ${ADMIN_KEY:?ADMIN_KEY must be set in .env}
+      PORT:         3080
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

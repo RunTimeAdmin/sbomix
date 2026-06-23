@@ -5,7 +5,9 @@ const { parsePoetryLock, parsePipfileLock, parseRequirementsTxt } = require('./p
 const { parseCargoLock } = require('./cargo');
 const { parseGoModules } = require('./golang');
 const { parsePnpmLock }  = require('./pnpm');
-const { parsePomXml }    = require('./maven');
+const { parsePomXml }        = require('./maven');
+const { parseGradleLock }    = require('./gradle');
+const { parsePackagesLock }  = require('./dotnet');
 const path = require('path');
 
 /**
@@ -24,6 +26,8 @@ function parseLockFile(lockFile) {
         case 'cargo-lock':  return parseCargoLock(lockFile.path);
         case 'go-modules':  return parseGoModules(path.dirname(lockFile.path));
         case 'maven-pom':   return parsePomXml(lockFile.path);
+        case 'gradle-lock': return parseGradleLock(lockFile.path);
+        case 'nuget-lock':  return parsePackagesLock(lockFile.path);
         default:
             console.warn(`[packrai] Unknown lock file type: ${lockFile.type}`);
             return [];

@@ -67,6 +67,8 @@ Lock files are the resolved dependency graph. They're authoritative, determinist
 | **Rust** | `Cargo.lock` | ✅ Full graph | SHA-256 checksums |
 | **Go** | `go.mod` + `go.sum` | ✅ Full graph | Direct/indirect detection |
 | **Java** | `pom.xml` | ✅ + `mvn` transitives | Resolves `${property}` vars |
+| **Java** | `gradle.lockfile` | ✅ Full graph | Scope-aware; requires `--write-locks` |
+| **.NET** | `packages.lock.json` | ✅ Full graph | SHA-512 hashes; requires `RestorePackagesWithLockFile` |
 
 Monorepos are supported — PackrAI recurses up to 4 directories deep and deduplicates lock files per directory.
 
@@ -263,6 +265,8 @@ packrai/
 │   │   ├── cargo.js        Cargo.lock
 │   │   ├── golang.js       go.mod + go.sum
 │   │   ├── maven.js        pom.xml
+│   │   ├── gradle.js       gradle.lockfile
+│   │   ├── dotnet.js       packages.lock.json (NuGet)
 │   │   ├── detect.js       Lock file auto-detection + deduplication
 │   │   └── index.js        Parser dispatcher
 │   ├── generators/
@@ -272,8 +276,12 @@ packrai/
 │       ├── server.js       Express API server
 │       ├── db.js           PostgreSQL connection pool
 │       └── schema.sql      Database schema
+├── scripts/
+│   └── benchmark.js        Benchmark PackrAI vs Syft vs Trivy
+├── Dockerfile              Multi-stage API server image
+├── docker-compose.yml      API + Postgres stack
 ├── tests/
-│   ├── parsers.test.js     Parser unit tests (25 tests)
+│   ├── parsers.test.js     Parser unit tests (36 tests)
 │   └── fixtures/           Sample lock files for testing
 ├── examples/
 │   └── github-workflow.yml Copy-paste GitHub Actions workflow

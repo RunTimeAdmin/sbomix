@@ -19,6 +19,8 @@ const LOCK_FILE_PATTERNS = [
     { file: 'Cargo.lock',        type: 'cargo-lock',  ecosystem: 'cargo'  },
     { file: 'go.mod',            type: 'go-modules',  ecosystem: 'golang' },
     { file: 'pom.xml',           type: 'maven-pom',   ecosystem: 'maven'  },
+    { file: 'gradle.lockfile',   type: 'gradle-lock', ecosystem: 'maven'  },
+    { file: 'packages.lock.json',type: 'nuget-lock',  ecosystem: 'nuget'  },
 ];
 
 // Directories to skip when walking
@@ -83,12 +85,15 @@ function deduplicate(lockFiles) {
         const pypi = pickBest(group.filter((f) => f.ecosystem === 'pypi'), ['poetry-lock', 'pipfile-lock', 'requirements']);
         const cargo  = group.find((f) => f.type === 'cargo-lock');
         const golang = group.find((f) => f.type === 'go-modules');
-        const maven  = group.find((f) => f.type === 'maven-pom');
+        // gradle.lockfile preferred over pom.xml — it has the full resolved graph
+        const java   = pickBest(group.filter((f) => f.ecosystem === 'maven'), ['gradle-lock', 'maven-pom']);
+        const nuget  = group.find((f) => f.type === 'nuget-lock');
         if (npm)    result.push(npm);
         if (pypi)   result.push(pypi);
         if (cargo)  result.push(cargo);
         if (golang) result.push(golang);
-        if (maven)  result.push(maven);
+        if (java)   result.push(java);
+        if (nuget)  result.push(nuget);
     }
     return result;
 }

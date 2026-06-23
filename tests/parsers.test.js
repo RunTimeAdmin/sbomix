@@ -6,8 +6,10 @@ const path = require('path');
 const { parsePackageLock } = require('../src/parsers/npm');
 const { parseCargoLock }   = require('../src/parsers/cargo');
 const { parsePnpmLock }    = require('../src/parsers/pnpm');
-const { parsePomXml }      = require('../src/parsers/maven');
-const { detect }           = require('../src/parsers/detect');
+const { parsePomXml }        = require('../src/parsers/maven');
+const { parseGradleLock }    = require('../src/parsers/gradle');
+const { parsePackagesLock }  = require('../src/parsers/dotnet');
+const { detect }             = require('../src/parsers/detect');
 
 const FIXTURES = path.join(__dirname, 'fixtures');
 
@@ -106,10 +108,18 @@ describe('detector', () => {
         assert.equal(npmFiles[0].type, 'npm-lock', 'package-lock.json should win over pnpm-lock.yaml');
     });
 
-    test('detects pom.xml', () => {
+    test('gradle.lockfile preferred over pom.xml in same directory', () => {
+        // Both gradle.lockfile and pom.xml are in fixtures — gradle wins
         const found = detect(FIXTURES, { recursive: false });
-        const maven = found.find((f) => f.type === 'maven-pom');
-        assert.ok(maven, 'pom.xml should be detected');
+        const javaFiles = found.filter((f) => f.ecosystem === 'maven');
+        assert.equal(javaFiles.length, 1, 'should return exactly one java lock file');
+        assert.equal(javaFiles[0].type, 'gradle-lock', 'gradle.lockfile should win over pom.xml');
+    });
+
+    test('detects packages.lock.json (.NET)', () => {
+        const found = detect(FIXTURES, { recursive: false });
+        const nuget = found.find((f) => f.type === 'nuget-lock');
+        assert.ok(nuget, 'packages.lock.json should be detected');
     });
 });
 
@@ -187,5 +197,75 @@ describe('maven parser', () => {
         const log4j = comps.find((c) => c.name === 'org.apache.logging.log4j/log4j-core');
         assert.ok(log4j, 'log4j-core not found');
         assert.equal(log4j.version, '2.20.0');
+    });
+});
+
+describe('gradle parser', () => {
+    test('parses gradle.lockfile and returns all packages', () => {
+        const comps = parseGradleLock(path.join(FIXTURES, 'gradle.lockfile'));
+        assert.ok(comps.length >= 10, `expected >=10 components, got ${comps.length}`);
+    });
+
+    test('all components have valid maven purls', () => {
+        const comps = parseGradleLock(path.join(FIXTURES, 'gradle.lockfile'));
+        for (const c of comps) {
+            assert.match(c.purl, /^pkg:maven\/.+@.+$/, `invalid purl: ${c.purl}`);
+        }
+    });
+
+    test('test-only deps marked as dev', () => {
+        const comps = parseGradleLock(path.join(FIXTURES, 'gradle.lockfile'));
+        const junit = comps.find((c) => c.name.includes('junit/junit'));
+        assert.ok(junit, 'junit not found');
+        assert.equal(junit.scope, 'dev');
+    });
+
+    test('runtime deps marked as required', () => {
+        const comps = parseGradleLock(path.join(FIXTURES, 'gradle.lockfile'));
+        const jackson = comps.find((c) => c.name.includes('jackson-databind'));
+        assert.ok(jackson, 'jackson-databind not found');
+        assert.equal(jackson.scope, 'required');
+    });
+
+    test('skips comment and empty= lines', () => {
+        const comps = parseGradleLock(path.join(FIXTURES, 'gradle.lockfile'));
+        assert.ok(comps.every((c) => c.name && c.version), 'some components have missing name or version');
+    });
+});
+
+describe('.NET parser', () => {
+    test('parses packages.lock.json and returns all packages', () => {
+        const comps = parsePackagesLock(path.join(FIXTURES, 'packages.lock.json'));
+        assert.ok(comps.length >= 5, `expected >=5 components, got ${comps.length}`);
+    });
+
+    test('all components have valid nuget purls', () => {
+        const comps = parsePackagesLock(path.join(FIXTURES, 'packages.lock.json'));
+        for (const c of comps) {
+            assert.match(c.purl, /^pkg:nuget\/.+@.+$/, `invalid purl: ${c.purl}`);
+        }
+    });
+
+    test('deduplicates packages across multiple target frameworks', () => {
+        const comps = parsePackagesLock(path.join(FIXTURES, 'packages.lock.json'));
+        const purls = comps.map((c) => c.purl);
+        const unique = new Set(purls);
+        assert.equal(purls.length, unique.size, 'duplicate components returned');
+    });
+
+    test('dependency graph: Swashbuckle depends on Swagger sub-packages', () => {
+        const comps = parsePackagesLock(path.join(FIXTURES, 'packages.lock.json'));
+        const swashbuckle = comps.find((c) => c.name === 'Swashbuckle.AspNetCore');
+        assert.ok(swashbuckle, 'Swashbuckle.AspNetCore not found');
+        assert.ok(swashbuckle.dependsOn.some((p) => p.includes('Swagger')),
+            'Swashbuckle should depend on Swagger sub-packages');
+    });
+
+    test('SHA-512 content hash stored', () => {
+        const comps = parsePackagesLock(path.join(FIXTURES, 'packages.lock.json'));
+        const newtonsoft = comps.find((c) => c.name === 'Newtonsoft.Json');
+        assert.ok(newtonsoft, 'Newtonsoft.Json not found');
+        assert.ok(newtonsoft.hashes.length > 0, 'no hash on Newtonsoft.Json');
+        assert.equal(newtonsoft.hashes[0].alg, 'SHA-512');
     });
 });

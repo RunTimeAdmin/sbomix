@@ -24,6 +24,8 @@ function makePurl(ecosystem, name, version) {
         case 'maven':
             // name expected as "groupId/artifactId"
             return `pkg:maven/${name}@${version}`;
+        case 'nuget':
+            return `pkg:nuget/${name}@${version}`;
         default:
             return `pkg:generic/${name}@${version}`;
     }
