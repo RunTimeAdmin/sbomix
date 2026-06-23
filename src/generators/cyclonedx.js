@@ -169,4 +169,50 @@ function randomUUID() {
     return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
 }
 
-module.exports = { generateCycloneDX };
+// ── Structural validator ──────────────────────────────────────────────────────
+// Lightweight check against CycloneDX 1.x minimum shape.
+// Returns { valid: true } or { valid: false, errors: string[] }.
+// Used by the pipeline (to assert our own output) and by the API ingest endpoint
+// (to reject malformed external payloads before touching the DB).
+
+const SUPPORTED_SPEC_VERSIONS = new Set(['1.4', '1.5', '1.6']);
+
+function validateCycloneDX(doc) {
+    const errors = [];
+
+    if (!doc || typeof doc !== 'object') {
+        return { valid: false, errors: ['document must be an object'] };
+    }
+    if (doc.bomFormat !== 'CycloneDX') {
+        errors.push(`bomFormat must be 'CycloneDX', got '${doc.bomFormat}'`);
+    }
+    if (!SUPPORTED_SPEC_VERSIONS.has(doc.specVersion)) {
+        errors.push(`specVersion must be one of ${[...SUPPORTED_SPEC_VERSIONS].join(', ')}, got '${doc.specVersion}'`);
+    }
+    if (!Array.isArray(doc.components)) {
+        errors.push('components must be an array');
+    } else if (doc.components.length > 20000) {
+        errors.push(`components exceeds maximum (20000), got ${doc.components.length}`);
+    } else {
+        // Spot-check first 50 components for minimum required fields
+        const sample = doc.components.slice(0, 50);
+        for (let i = 0; i < sample.length; i++) {
+            const c = sample[i];
+            if (!c || typeof c !== 'object') {
+                errors.push(`components[${i}] must be an object`); continue;
+            }
+            if (!c.name)    errors.push(`components[${i}].name is required`);
+            if (!c.version) errors.push(`components[${i}].version is required`);
+        }
+    }
+    if (doc.metadata !== undefined && typeof doc.metadata !== 'object') {
+        errors.push('metadata must be an object if present');
+    }
+    if (doc.vulnerabilities !== undefined && !Array.isArray(doc.vulnerabilities)) {
+        errors.push('vulnerabilities must be an array if present');
+    }
+
+    return errors.length === 0 ? { valid: true } : { valid: false, errors };
+}
+
+module.exports = { generateCycloneDX, validateCycloneDX };

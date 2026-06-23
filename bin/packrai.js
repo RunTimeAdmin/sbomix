@@ -148,7 +148,7 @@ program
             } else {
                 console.error(JSON.stringify({ error: err.message }));
             }
-            process.exit(1);
+            process.exit(2);  // exit 2 = fatal error (distinct from exit 1 = critical vulns)
         } finally {
             if (cleanup) cleanup();
         }

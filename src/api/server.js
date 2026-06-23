@@ -3,9 +3,11 @@
 require('dotenv').config();
 const crypto    = require('crypto');
 const express   = require('express');
+const cors      = require('cors');
 const helmet    = require('helmet');
 const rateLimit = require('express-rate-limit');
 const db        = require('./db');
+const { validateCycloneDX } = require('../generators/cyclonedx');
 
 // ── Startup guard ─────────────────────────────────────────────────────────────
 if (!process.env.HMAC_SECRET) {
@@ -19,6 +21,18 @@ const app = express();
 // ── Security headers ──────────────────────────────────────────────────────────
 app.use(helmet());
 app.disable('x-powered-by');
+
+// ── CORS ──────────────────────────────────────────────────────────────────────
+// Only enabled when CORS_ORIGIN is explicitly set (browser dashboard use).
+// Server-to-server calls (CI, CLI) do not need CORS headers.
+if (process.env.CORS_ORIGIN) {
+    app.use(cors({
+        origin: process.env.CORS_ORIGIN,
+        methods: ['GET', 'POST', 'DELETE'],
+        allowedHeaders: ['Authorization', 'Content-Type'],
+        credentials: true,
+    }));
+}
 
 // ── Body parser ───────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));
@@ -119,11 +133,40 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 // Body: { app, version, commit, branch, cyclonedx, spdx, stats }
 app.post('/api/v1/ingest', ingestLimiter, requireScope('sbom:ingest'), async (req, res) => {
     const { app: appName, version, commit, branch, cyclonedx, spdx, stats } = req.body;
-    if (!appName || !cyclonedx) {
-        return res.status(400).json({ error: 'app and cyclonedx are required' });
+
+    // ── Input validation ──────────────────────────────────────────────────────
+    if (!appName || typeof appName !== 'string') {
+        return res.status(400).json({ error: 'app must be a non-empty string' });
     }
-    if (!Array.isArray(cyclonedx.components)) {
-        return res.status(400).json({ error: 'cyclonedx.components must be an array' });
+    if (appName.length > 200) {
+        return res.status(400).json({ error: 'app name must be 200 characters or fewer' });
+    }
+    if (!cyclonedx || typeof cyclonedx !== 'object') {
+        return res.status(400).json({ error: 'cyclonedx must be an object' });
+    }
+    const cdxCheck = validateCycloneDX(cyclonedx);
+    if (!cdxCheck.valid) {
+        return res.status(400).json({ error: 'Invalid CycloneDX document', details: cdxCheck.errors });
+    }
+    if (version  !== undefined && (typeof version  !== 'string' || version.length  > 100)) {
+        return res.status(400).json({ error: 'version must be a string ≤ 100 characters' });
+    }
+    if (commit   !== undefined && (typeof commit   !== 'string' || commit.length   > 64)) {
+        return res.status(400).json({ error: 'commit must be a string ≤ 64 characters' });
+    }
+    if (branch   !== undefined && (typeof branch   !== 'string' || branch.length   > 250)) {
+        return res.status(400).json({ error: 'branch must be a string ≤ 250 characters' });
+    }
+    if (stats !== undefined) {
+        if (typeof stats !== 'object' || Array.isArray(stats)) {
+            return res.status(400).json({ error: 'stats must be an object' });
+        }
+        if (stats.totalComponents !== undefined && (typeof stats.totalComponents !== 'number' || stats.totalComponents < 0)) {
+            return res.status(400).json({ error: 'stats.totalComponents must be a non-negative number' });
+        }
+        if (stats.critical !== undefined && (typeof stats.critical !== 'number' || stats.critical < 0)) {
+            return res.status(400).json({ error: 'stats.critical must be a non-negative number' });
+        }
     }
 
     try {
@@ -392,10 +435,14 @@ app.get('/api/v1/report', requireScope('sbom:read'), async (req, res) => {
 // Body: { name, scopes }  — scopes defaults to ["sbom:ingest","sbom:read"]
 app.post('/api/v1/keys', requireScope('org:admin'), async (req, res) => {
     const VALID_SCOPES = new Set(['sbom:ingest', 'sbom:read', 'org:admin']);
-    const name   = req.body.name || 'default';
-    const scopes = req.body.scopes ?? ['sbom:ingest', 'sbom:read'];
+    const rawName = req.body.name;
+    const name    = (typeof rawName === 'string' && rawName.trim()) ? rawName.trim() : 'default';
+    const scopes  = req.body.scopes ?? ['sbom:ingest', 'sbom:read'];
 
-    if (!Array.isArray(scopes) || !scopes.every(s => VALID_SCOPES.has(s))) {
+    if (rawName !== undefined && (typeof rawName !== 'string' || rawName.length > 100)) {
+        return res.status(400).json({ error: 'name must be a string ≤ 100 characters' });
+    }
+    if (!Array.isArray(scopes) || scopes.length === 0 || !scopes.every(s => VALID_SCOPES.has(s))) {
         return res.status(400).json({
             error: 'Invalid scopes',
             valid: [...VALID_SCOPES],
@@ -464,7 +511,12 @@ app.post('/api/v1/orgs', async (req, res) => {
     }
 
     const { name } = req.body;
-    if (!name) return res.status(400).json({ error: 'name is required' });
+    if (!name || typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({ error: 'name must be a non-empty string' });
+    }
+    if (name.length > 200) {
+        return res.status(400).json({ error: 'name must be 200 characters or fewer' });
+    }
 
     try {
         const apiKey     = generateApiKey();

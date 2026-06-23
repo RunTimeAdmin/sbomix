@@ -167,9 +167,11 @@ Options:
 ### Exit Codes
 | Code | Meaning |
 |------|---------|
-| `0` | Success, no critical vulnerabilities |
-| `1` | Critical vulnerabilities found (use `--no-vulns` to disable gating) |
-| `1` | Error (no lock files found, clone failed, etc.) |
+| `0` | Success — no critical vulnerabilities |
+| `1` | Critical vulnerabilities found (human output mode only; use `--json` for non-blocking CI output) |
+| `2` | Fatal error — no lock files found, clone failed, or unrecoverable parse error |
+
+> **Note:** The GitHub Action uses `--json` for generation (always exits 0), then enforces gating in a separate final step. This ensures artifacts are uploaded and PR comments are posted even when criticals are found.
 
 ---
 
@@ -339,6 +341,34 @@ packrai/
 - **NTIA Minimum Elements** — all 7 required fields present
 - **CISA 2025 Minimum Elements** — purl, hashes, licenses, relationships, metadata
 - **EO 14028** — US Executive Order on supply chain security
+
+---
+
+## Known Limitations
+
+PackrAI is a **lock-file-first** SBOM generator. This makes it fast and accurate for dependency graphs, but it is not a universal replacement for filesystem scanners like Syft or Trivy.
+
+### What it does not cover
+
+| Area | Detail |
+|------|--------|
+| **Container/image scanning** | PackrAI does not scan Docker image layers or OS-level packages. For container SBOMs, combine with Trivy. |
+| **Compiled binaries** | SBOMs are generated from source lock files, not from inspecting compiled output or vendored binaries. |
+| **Dynamically loaded plugins** | Runtime-only or lazily loaded dependencies not reflected in lock files will not appear. |
+| **No lock file → no SBOM** | If a project does not commit a lock file (some library maintainers intentionally do not), PackrAI cannot generate a transitive SBOM. `requirements.txt` produces direct-only output with a warning. |
+
+### Per-ecosystem limitations
+
+| Ecosystem | Limitation |
+|-----------|-----------|
+| **Java (Maven)** | Transitive resolution requires `mvn` to be installed locally. Without it, PackrAI returns direct dependencies only and prints a warning. |
+| **Swift / Dart** | `Package.resolved` and `pubspec.lock` do not encode the full dependency graph — only the flat resolved set. `is_direct` detection is not available for these ecosystems. |
+| **Gradle** | Requires `--write-locks` to have been run in the project to produce `gradle.lockfile`. Projects without lock files are skipped. |
+| **.NET** | Requires `RestorePackagesWithLockFile=true` in the project. `packages.lock.json` must be committed. |
+
+### Benchmark context
+
+The speed comparison against Syft and Trivy reflects a specific scenario: scanning lock-file-based repos. Syft and Trivy do broader filesystem and container image analysis — that work is genuinely more complex and their slower speed is not purely overhead. PackrAI's advantage is narrow and intentional: if you have lock files, use them.
 
 ---
 

@@ -14,7 +14,7 @@ const { detect } = require('./parsers/detect');
 const { parseLockFile } = require('./parsers/index');
 const { enrichWithOSV } = require('./osv');
 const { enrichWithLicenses } = require('./licenses');
-const { generateCycloneDX } = require('./generators/cyclonedx');
+const { generateCycloneDX, validateCycloneDX } = require('./generators/cyclonedx');
 const { generateSPDX } = require('./generators/spdx');
 
 /**
@@ -62,6 +62,13 @@ async function generateFromDirectory(dir, opts = {}) {
     const meta = { name, version, author: opts.author };
     const cyclonedx = generateCycloneDX(allComponents, meta);
     const spdx = generateSPDX(allComponents, meta);
+
+    // Self-check: our own CycloneDX output must always pass structural validation.
+    // This catches regressions in the generator before the caller writes files.
+    const cdxCheck = validateCycloneDX(cyclonedx);
+    if (!cdxCheck.valid) {
+        throw new Error(`CycloneDX generator produced invalid output: ${cdxCheck.errors.join('; ')}`);
+    }
 
     const elapsedMs = Date.now() - startMs;
     const vulnCount = allComponents.reduce((n, c) => n + (c.vulnerabilities ? c.vulnerabilities.length : 0), 0);
