@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PackrAI Dashboard</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --accent:  #3fb950;
+    --red:     #f85149;
+    --yellow:  #d29922;
+    --blue:    #58a6ff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; min-height: 100vh; }
+
+  header { border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+  .logo  { font-weight: 700; font-size: 18px; letter-spacing: -0.3px; }
+  .logo span { color: var(--accent); }
+  .logout-btn { background: none; border: 1px solid var(--border); color: var(--muted); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .logout-btn:hover { color: var(--text); border-color: var(--muted); }
+
+  /* Auth screen */
+  #auth-screen { display: flex; align-items: center; justify-content: center; height: calc(100vh - 57px); }
+  .auth-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 40px; width: 420px; }
+  .auth-card h2 { font-size: 20px; margin-bottom: 8px; }
+  .auth-card p  { color: var(--muted); margin-bottom: 24px; line-height: 1.5; }
+  .auth-card input { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 10px 14px; border-radius: 8px; font-family: 'Menlo', 'Consolas', monospace; font-size: 13px; outline: none; }
+  .auth-card input:focus { border-color: var(--accent); }
+  .auth-card input::placeholder { color: var(--muted); }
+  .auth-card button { margin-top: 16px; width: 100%; background: var(--accent); color: #000; font-weight: 600; border: none; padding: 10px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+  .auth-card button:hover { opacity: 0.9; }
+  .auth-error { color: var(--red); font-size: 13px; margin-top: 10px; display: none; }
+
+  /* Main layout */
+  #main-screen { display: none; padding: 24px; max-width: 1100px; margin: 0 auto; }
+
+  /* Summary cards */
+  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .card-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .card-value { font-size: 32px; font-weight: 700; line-height: 1; }
+  .card-value.red    { color: var(--red); }
+  .card-value.yellow { color: var(--yellow); }
+  .card-value.green  { color: var(--accent); }
+
+  /* Section */
+  .section { margin-bottom: 32px; }
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .section-title { font-size: 16px; font-weight: 600; }
+
+  /* CVE search */
+  .search-row { display: flex; gap: 10px; }
+  .search-row input { flex: 1; background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 9px 14px; border-radius: 8px; font-size: 14px; outline: none; }
+  .search-row input:focus { border-color: var(--accent); }
+  .search-row input::placeholder { color: var(--muted); }
+  .search-row button { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 9px 18px; border-radius: 8px; cursor: pointer; font-size: 14px; white-space: nowrap; }
+  .search-row button:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Tables */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: var(--surface); text-align: left; padding: 11px 16px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); border-bottom: 1px solid var(--border); font-weight: 600; }
+  td { padding: 12px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(48,54,61,0.4); }
+  .mono { font-family: 'Menlo', 'Consolas', monospace; font-size: 12px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .badge-red    { background: rgba(248,81,73,0.15);  color: var(--red); }
+  .badge-yellow { background: rgba(210,153,34,0.15); color: var(--yellow); }
+  .badge-green  { background: rgba(63,185,80,0.15);  color: var(--accent); }
+  .badge-muted  { background: rgba(139,148,158,0.15); color: var(--muted); }
+
+  /* Empty / loading states */
+  .empty { text-align: center; padding: 48px 24px; color: var(--muted); }
+  .spinner { width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; vertical-align: middle; margin-right: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading { color: var(--muted); padding: 32px; text-align: center; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Packr<span>AI</span></div>
+  <button class="logout-btn" id="logout-btn" style="display:none">Sign out</button>
+</header>
+
+<!-- Auth screen -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <h2>Sign in to Dashboard</h2>
+    <p>Enter your PackrAI API key to view your org's SBOM inventory and risk posture.</p>
+    <input type="password" id="api-key-input" placeholder="API key" autocomplete="off">
+    <button id="auth-btn">Continue</button>
+    <div class="auth-error" id="auth-error">Invalid API key — check and try again.</div>
+  </div>
+</div>
+
+<!-- Main dashboard -->
+<div id="main-screen">
+
+  <!-- Summary cards -->
+  <div class="cards">
+    <div class="card">
+      <div class="card-label">Apps</div>
+      <div class="card-value" id="stat-apps">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Components</div>
+      <div class="card-value" id="stat-components">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Critical</div>
+      <div class="card-value red" id="stat-critical">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">High</div>
+      <div class="card-value yellow" id="stat-high">—</div>
+    </div>
+  </div>
+
+  <!-- CVE Search -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">CVE / OSV Search</div>
+    </div>
+    <div class="search-row" style="margin-bottom:14px">
+      <input type="text" id="cve-input" placeholder="CVE-2021-44228 or GHSA-…" autocomplete="off">
+      <button id="cve-btn">Search</button>
+    </div>
+    <div id="cve-results"></div>
+  </div>
+
+  <!-- Apps -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">Applications</div>
+    </div>
+    <div id="apps-container" class="loading"><span class="spinner"></span>Loading…</div>
+  </div>
+
+  <!-- Top vulnerabilities -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">Top Critical &amp; High Vulnerabilities</div>
+    </div>
+    <div id="vulns-container" class="loading"><span class="spinner"></span>Loading…</div>
+  </div>
+
+</div>
+
+<script>
+const API = '';  // same origin
+
+let apiKey = '';
+
+function save(key) {
+  apiKey = key;
+  localStorage.setItem('packrai_key', key);
+}
+
+function sev(s) {
+  if (!s) return '<span class="badge badge-muted">—</span>';
+  if (s === 'CRITICAL') return '<span class="badge badge-red">CRITICAL</span>';
+  if (s === 'HIGH')     return '<span class="badge badge-yellow">HIGH</span>';
+  if (s === 'MEDIUM')   return '<span class="badge badge-muted">MEDIUM</span>';
+  return `<span class="badge badge-muted">${s}</span>`;
+}
+
+function timeAgo(iso) {
+  if (!iso) return '—';
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 2)   return 'just now';
+  if (m < 60)  return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24)  return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
+
+async function apiFetch(path) {
+  const r = await fetch(API + path, { headers: { Authorization: `Bearer ${apiKey}` } });
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+}
+
+async function loadDashboard() {
+  document.getElementById('main-screen').style.display = 'block';
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('logout-btn').style.display = 'block';
+
+  // Load apps + report in parallel
+  const [appsData, reportData] = await Promise.allSettled([
+    apiFetch('/api/v1/apps'),
+    apiFetch('/api/v1/report'),
+  ]);
+
+  // Summary cards
+  if (reportData.status === 'fulfilled') {
+    const s = reportData.value.summary;
+    document.getElementById('stat-apps').textContent       = s.total_apps ?? '0';
+    document.getElementById('stat-components').textContent = s.unique_components ?? '0';
+    document.getElementById('stat-critical').textContent   = s.critical ?? '0';
+    document.getElementById('stat-high').textContent       = s.high ?? '0';
+  }
+
+  // Apps table
+  const appsEl = document.getElementById('apps-container');
+  if (appsData.status === 'fulfilled') {
+    const apps = appsData.value.apps;
+    if (!apps.length) {
+      appsEl.innerHTML = '<div class="empty">No apps ingested yet.<br><br>Run <code>npx packrai owner/repo</code> and push your SBOM to see data here.</div>';
+    } else {
+      appsEl.innerHTML = `
+        <div class="table-wrap"><table>
+          <thead><tr>
+            <th>Application</th><th>Last scanned</th><th>SBOMs</th><th>Critical</th>
+          </tr></thead>
+          <tbody>${apps.map(a => `
+            <tr>
+              <td class="mono">${esc(a.name)}</td>
+              <td style="color:var(--muted)">${timeAgo(a.last_scanned)}</td>
+              <td>${a.sbom_count}</td>
+              <td>${Number(a.critical_count) > 0
+                    ? `<span class="badge badge-red">${a.critical_count}</span>`
+                    : '<span class="badge badge-green">0</span>'}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table></div>`;
+    }
+  } else {
+    appsEl.innerHTML = '<div class="empty">Failed to load apps.</div>';
+  }
+
+  // Top vulns table
+  const vulnsEl = document.getElementById('vulns-container');
+  if (reportData.status === 'fulfilled') {
+    const vulns = reportData.value.topVulnerabilities;
+    if (!vulns.length) {
+      vulnsEl.innerHTML = '<div class="empty" style="color:var(--accent)">✓ No critical or high vulnerabilities found across your org.</div>';
+    } else {
+      vulnsEl.innerHTML = `
+        <div class="table-wrap"><table>
+          <thead><tr>
+            <th>ID</th><th>Severity</th><th>CVSS</th><th>Apps affected</th><th>Title</th>
+          </tr></thead>
+          <tbody>${vulns.map(v => `
+            <tr>
+              <td class="mono"><a href="https://osv.dev/vulnerability/${esc(v.osv_id)}" target="_blank" style="color:var(--blue);text-decoration:none">${esc(v.cve_id || v.osv_id)}</a></td>
+              <td>${sev(v.severity)}</td>
+              <td style="color:var(--muted)">${v.cvss_score ?? '—'}</td>
+              <td>${v.apps_affected}</td>
+              <td style="color:var(--muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.title || '')}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table></div>`;
+    }
+  } else {
+    vulnsEl.innerHTML = '';
+  }
+}
+
+async function tryAuth(key) {
+  const errEl = document.getElementById('auth-error');
+  errEl.style.display = 'none';
+  try {
+    const r = await fetch(API + '/api/v1/apps', { headers: { Authorization: `Bearer ${key}` } });
+    if (!r.ok) throw new Error('invalid');
+    save(key);
+    loadDashboard();
+  } catch {
+    errEl.style.display = 'block';
+  }
+}
+
+function esc(s) {
+  return String(s || '').replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+// CVE search
+document.getElementById('cve-btn').addEventListener('click', async () => {
+  const q = document.getElementById('cve-input').value.trim();
+  if (!q) return;
+  const el = document.getElementById('cve-results');
+  el.innerHTML = '<div class="loading"><span class="spinner"></span>Searching…</div>';
+  try {
+    const data = await apiFetch(`/api/v1/search?cve=${encodeURIComponent(q)}`);
+    if (!data.results.length) {
+      el.innerHTML = `<div class="empty" style="color:var(--accent)">✓ No apps exposed to <strong>${esc(q)}</strong></div>`;
+      return;
+    }
+    el.innerHTML = `
+      <div style="color:var(--muted);margin-bottom:10px">${data.exposedApps} app${data.exposedApps !== 1 ? 's' : ''} exposed to <strong style="color:var(--text)">${esc(q)}</strong></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>App</th><th>Component</th><th>Version</th><th>Severity</th><th>Fix</th></tr></thead>
+        <tbody>${data.results.map(r => `
+          <tr>
+            <td class="mono">${esc(r.app)}</td>
+            <td class="mono">${esc(r.component)}</td>
+            <td class="mono" style="color:var(--muted)">${esc(r.component_version)}</td>
+            <td>${sev(r.severity)}</td>
+            <td class="mono" style="color:var(--accent)">${esc(r.fixed_version || '—')}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div>`;
+  } catch {
+    el.innerHTML = '<div class="empty">Search failed.</div>';
+  }
+});
+
+document.getElementById('cve-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('cve-btn').click();
+});
+
+// Auth
+document.getElementById('auth-btn').addEventListener('click', () => {
+  const k = document.getElementById('api-key-input').value.trim();
+  if (k) tryAuth(k);
+});
+document.getElementById('api-key-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('auth-btn').click();
+});
+document.getElementById('logout-btn').addEventListener('click', () => {
+  localStorage.removeItem('packrai_key');
+  location.reload();
+});
+
+// Auto-login from localStorage
+const saved = localStorage.getItem('packrai_key');
+if (saved) { apiKey = saved; loadDashboard(); }
+</script>
+</body>
+</html>

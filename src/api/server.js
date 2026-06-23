@@ -6,8 +6,10 @@ const express   = require('express');
 const cors      = require('cors');
 const helmet    = require('helmet');
 const rateLimit = require('express-rate-limit');
+const path      = require('path');
 const db        = require('./db');
 const { validateCycloneDX } = require('../generators/cyclonedx');
+const { enrichWithOSV }     = require('../osv');
 
 // ── Startup guard ─────────────────────────────────────────────────────────────
 if (!process.env.HMAC_SECRET) {
@@ -125,6 +127,51 @@ function requireScope(scope) {
     };
 }
 
+// ── OSV auto-enrichment ───────────────────────────────────────────────────────
+// Called async after ingest when the payload contained no vulnerability data.
+// Queries OSV for every component purl and stores results without blocking
+// the ingest response.
+async function osvEnrichAsync(orgId, cdxComponents, purlToCompId) {
+    const components = cdxComponents.map(c => ({
+        name:      c.name,
+        version:   c.version || 'unknown',
+        purl:      c.purl,
+        ecosystem: c.purl.split(':')[1]?.split('/')[0] ?? 'unknown',
+    }));
+
+    await enrichWithOSV(components, { timeout: 20000 });
+
+    for (const comp of components) {
+        if (!comp.vulnerabilities?.length) continue;
+        const compId = purlToCompId.get(comp.purl);
+        if (!compId) continue;
+
+        for (const v of comp.vulnerabilities) {
+            const cveId       = v.aliases?.find(a => a.startsWith('CVE-')) ?? null;
+            const cvssScore   = (v.cvss && !isNaN(parseFloat(v.cvss))) ? parseFloat(v.cvss) : null;
+            const fixedVersion = v.fixedIn?.[0] ?? null;
+
+            await db.query(
+                `INSERT INTO vulnerabilities
+                   (component_id, org_id, osv_id, cve_id, severity, cvss_score, fixed_version, title)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+                 ON CONFLICT (component_id, osv_id) DO UPDATE
+                   SET severity     = EXCLUDED.severity,
+                       cvss_score   = COALESCE(EXCLUDED.cvss_score, vulnerabilities.cvss_score),
+                       last_checked = NOW()`,
+                [compId, orgId, v.id, cveId,
+                 v.severity === 'UNKNOWN' ? null : v.severity,
+                 cvssScore, fixedVersion, v.summary || null]
+            );
+        }
+    }
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+app.get('/dashboard', (_req, res) => {
+    res.sendFile(path.join(__dirname, 'dashboard.html'));
+});
+
 // ── Health ────────────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
@@ -170,7 +217,7 @@ app.post('/api/v1/ingest', ingestLimiter, requireScope('sbom:ingest'), async (re
     }
 
     try {
-        const sbomId = await db.tx(async (client) => {
+        const { sbomId, purlToCompId } = await db.tx(async (client) => {
             // Upsert application
             const appRes = await client.query(
                 `INSERT INTO applications (org_id, name)
@@ -211,7 +258,7 @@ app.post('/api/v1/ingest', ingestLimiter, requireScope('sbom:ingest'), async (re
             );
 
             const components = cyclonedx.components.filter(c => c.purl);
-            if (!components.length) return sbomId;
+            if (!components.length) return { sbomId, purlToCompId: new Map() };
 
             // ── Bulk upsert components ────────────────────────────────────────
             // Single query instead of N round-trips. RETURNING gives us purl→id.
@@ -278,10 +325,16 @@ app.post('/api/v1/ingest', ingestLimiter, requireScope('sbom:ingest'), async (re
                 }
             }
 
-            return sbomId;
+            return { sbomId, purlToCompId };
         });
 
         res.status(201).json({ sbomId });
+
+        // Fire-and-forget OSV enrichment when payload had no vulnerability data
+        if (!cyclonedx.vulnerabilities?.length && purlToCompId.size > 0) {
+            osvEnrichAsync(req.org.id, cyclonedx.components.filter(c => c.purl), purlToCompId)
+                .catch(err => console.error('[osv-enrich]', err.message));
+        }
     } catch (err) {
         console.error('[ingest]', err.message);
         res.status(500).json({ error: 'Ingest failed' });
