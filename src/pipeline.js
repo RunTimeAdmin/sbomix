@@ -13,6 +13,7 @@ const os = require('os');
 const { detect } = require('./parsers/detect');
 const { parseLockFile } = require('./parsers/index');
 const { enrichWithOSV } = require('./osv');
+const { enrichWithLicenses } = require('./licenses');
 const { generateCycloneDX } = require('./generators/cyclonedx');
 const { generateSPDX } = require('./generators/spdx');
 
@@ -24,14 +25,16 @@ const { generateSPDX } = require('./generators/spdx');
  * @param {string} [opts.name]     - project name (default: basename of dir)
  * @param {string} [opts.version] - version / tag
  * @param {string} [opts.author]  - org or author name
- * @param {boolean} [opts.vulns]  - run OSV enrichment (default: true)
+ * @param {boolean} [opts.vulns]     - run OSV vulnerability enrichment (default: true)
+ * @param {boolean} [opts.licenses]  - run deps.dev license enrichment (default: true)
  * @param {boolean} [opts.recursive] - walk subdirs for monorepos (default: true)
  */
 async function generateFromDirectory(dir, opts = {}) {
     const startMs = Date.now();
     const name = opts.name || path.basename(dir);
     const version = opts.version || 'unknown';
-    const runVulns = opts.vulns !== false;
+    const runVulns    = opts.vulns    !== false;
+    const runLicenses = opts.licenses !== false;
 
     // 1. Detect lock files
     const lockFiles = detect(dir, { recursive: opts.recursive !== false });
@@ -49,10 +52,11 @@ async function generateFromDirectory(dir, opts = {}) {
         ecosystemsFound.add(lf.ecosystem);
     }
 
-    // 3. Enrich with vulnerability data (parallel OSV batch)
-    if (runVulns && allComponents.length > 0) {
-        await enrichWithOSV(allComponents);
-    }
+    // 3. Parallel enrichment — license and vulnerability data
+    await Promise.all([
+        runLicenses && allComponents.length > 0 ? enrichWithLicenses(allComponents) : null,
+        runVulns    && allComponents.length > 0 ? enrichWithOSV(allComponents)      : null,
+    ]);
 
     // 4. Generate both formats
     const meta = { name, version, author: opts.author };

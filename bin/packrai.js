@@ -40,6 +40,7 @@ program
     .option('-a, --author <org>',   'Author or organisation name')
     .option('--token <token>',      'GitHub token for private repos (or set $GITHUB_TOKEN)')
     .option('--no-vulns',           'Skip OSV vulnerability enrichment')
+    .option('--no-licenses',        'Skip deps.dev license enrichment')
     .option('--no-recursive',       'Do not recurse into subdirectories')
     .option('--format <fmt>',       'Output format: both|cyclonedx|spdx',      'both')
     .option('--json',               'Print summary as JSON (machine-readable)')
@@ -88,6 +89,7 @@ program
                 version:   repoVer,
                 author:    opts.author,
                 vulns:     opts.vulns,
+                licenses:  opts.licenses,
                 recursive: opts.recursive,
             });
 
