@@ -41,7 +41,7 @@ bom.spdx.json        ← SPDX 2.3
 
 | | PackrAI | Syft | Trivy |
 |---|---|---|---|
-| **Speed** | **270–540ms** | 10–27s | 11–83s |
+| **Speed** | **250–465ms** | 9–28s | 10–87s |
 | **Approach** | Lock-file parsing | Filesystem scan | Filesystem + image scan |
 | **Transitives** | Full graph | Partial | Partial |
 | **Dep graph** | ✅ | ✅ | ❌ |
@@ -54,15 +54,15 @@ Lock files are the resolved dependency graph. They're authoritative, determinist
 
 ## Benchmark Results
 
-Measured on identical shallow-cloned repos — pure scan speed, same input for every tool. Syft and Trivy run via Docker (includes ~3–5s container startup overhead; native installs would be ~30% faster but still orders of magnitude slower).
+PackrAI is sub-500ms across all three benchmark repos because it reads resolved lock files directly instead of walking the filesystem or performing broader image-style analysis. On `nestjs/nest`, it completed in 463ms versus 27.7s for Syft and 86.5s for Trivy — a 60× speedup over Syft and 187× over Trivy for this benchmark setup.
 
-| Repo | Ecosystem | PackrAI | Syft | Trivy | Syft speedup | Trivy speedup |
-|------|-----------|---------|------|-------|-------------|--------------|
-| `nestjs/nest` | npm (1 247 packages) | **541ms** | 27 248ms | 83 318ms | 50× | 154× |
-| `psf/requests` | Python (poetry.lock) | **276ms** | 12 267ms | 10 708ms | 44× | 39× |
-| `BurntSushi/ripgrep` | Rust (Cargo.lock) | **284ms** | 10 452ms | 15 489ms | 37× | 55× |
+| Repo | Ecosystem | PackrAI | Syft | Trivy |
+|------|-----------|---------|------|-------|
+| `nestjs/nest` | npm | **463ms** | 27 731ms | 86 550ms |
+| `psf/requests` | Python | **251ms** | 9 330ms | 10 502ms |
+| `BurntSushi/ripgrep` | Rust | **268ms** | 11 823ms | 15 425ms |
 
-**Average: PackrAI is 44× faster than Syft and 83× faster than Trivy.**
+Different tools solve different problems. Syft and Trivy inspect broader filesystem and container context — that work is genuinely more complex and their slower speed is not purely overhead. PackrAI is intentionally narrower: fast, deterministic SBOM generation from lock files.
 
 Reproduce with:
 ```bash
@@ -368,7 +368,7 @@ PackrAI is a **lock-file-first** SBOM generator. This makes it fast and accurate
 
 ### Benchmark context
 
-The speed comparison against Syft and Trivy reflects a specific scenario: scanning lock-file-based repos. Syft and Trivy do broader filesystem and container image analysis — that work is genuinely more complex and their slower speed is not purely overhead. PackrAI's advantage is narrow and intentional: if you have lock files, use them.
+The speed comparison reflects a specific scenario: shallow-cloned repos with committed lock files. Syft and Trivy run via Docker in this setup, which adds ~3–5s of container startup overhead. Native installs would be somewhat faster — but still an order of magnitude slower for lock-file repos. See the Benchmark Results section for the full caveat.
 
 ---
 
