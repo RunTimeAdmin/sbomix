@@ -1,6 +1,25 @@
 node_modules/
 coverage/
-*.log
-.env
 dist/
+
+# Environment / secrets
+.env
+.env.*
+*.env
+
+# Generated test output
+tests/fixtures/out/
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
