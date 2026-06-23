@@ -9,6 +9,8 @@ const { parsePnpmLock }    = require('../src/parsers/pnpm');
 const { parsePomXml }        = require('../src/parsers/maven');
 const { parseGradleLock }    = require('../src/parsers/gradle');
 const { parsePackagesLock }  = require('../src/parsers/dotnet');
+const { parseGemfileLock }   = require('../src/parsers/ruby');
+const { parseComposerLock }  = require('../src/parsers/php');
 const { detect }             = require('../src/parsers/detect');
 
 const FIXTURES = path.join(__dirname, 'fixtures');
@@ -267,5 +269,146 @@ describe('.NET parser', () => {
         assert.ok(newtonsoft, 'Newtonsoft.Json not found');
         assert.ok(newtonsoft.hashes.length > 0, 'no hash on Newtonsoft.Json');
         assert.equal(newtonsoft.hashes[0].alg, 'SHA-512');
+    });
+});
+
+describe('pnpm v9 parser', () => {
+    test('parses pnpm-lock-v9.yaml and returns all packages', () => {
+        const comps = parsePnpmLock(path.join(FIXTURES, 'pnpm-lock-v9.yaml'));
+        assert.ok(comps.length >= 4, `expected >=4 components, got ${comps.length}`);
+    });
+
+    test('all components have valid npm purls', () => {
+        const comps = parsePnpmLock(path.join(FIXTURES, 'pnpm-lock-v9.yaml'));
+        for (const c of comps) {
+            assert.match(c.purl, /^pkg:npm\/.+@.+$/, `invalid purl: ${c.purl}`);
+        }
+    });
+
+    test('jest is marked as dev scope', () => {
+        const comps = parsePnpmLock(path.join(FIXTURES, 'pnpm-lock-v9.yaml'));
+        const jest = comps.find(c => c.name === 'jest');
+        assert.ok(jest, 'jest not found');
+        assert.equal(jest.scope, 'dev');
+    });
+
+    test('express is marked as required scope', () => {
+        const comps = parsePnpmLock(path.join(FIXTURES, 'pnpm-lock-v9.yaml'));
+        const express = comps.find(c => c.name === 'express');
+        assert.ok(express, 'express not found');
+        assert.equal(express.scope, 'required');
+    });
+
+    test('transitive dep captured (mime-types via accepts)', () => {
+        const comps = parsePnpmLock(path.join(FIXTURES, 'pnpm-lock-v9.yaml'));
+        assert.ok(comps.find(c => c.name === 'mime-types'), 'mime-types transitive not found');
+    });
+
+    test('dependency graph: express depends on accepts', () => {
+        const comps = parsePnpmLock(path.join(FIXTURES, 'pnpm-lock-v9.yaml'));
+        const express = comps.find(c => c.name === 'express');
+        assert.ok(express.dependsOn.some(p => p.includes('accepts')),
+            'express.dependsOn missing accepts');
+    });
+
+    test('SHA-512 integrity hash parsed', () => {
+        const comps = parsePnpmLock(path.join(FIXTURES, 'pnpm-lock-v9.yaml'));
+        const express = comps.find(c => c.name === 'express');
+        assert.ok(express.hashes.length > 0, 'no hashes on express');
+        assert.equal(express.hashes[0].alg, 'SHA-512');
+    });
+});
+
+describe('Ruby parser', () => {
+    test('parses Gemfile.lock and returns all gems', () => {
+        const comps = parseGemfileLock(path.join(FIXTURES, 'Gemfile.lock'));
+        assert.ok(comps.length >= 8, `expected >=8 components, got ${comps.length}`);
+    });
+
+    test('all components have valid gem purls', () => {
+        const comps = parseGemfileLock(path.join(FIXTURES, 'Gemfile.lock'));
+        for (const c of comps) {
+            assert.match(c.purl, /^pkg:gem\/.+@.+$/, `invalid purl: ${c.purl}`);
+        }
+    });
+
+    test('rails is present with correct version', () => {
+        const comps = parseGemfileLock(path.join(FIXTURES, 'Gemfile.lock'));
+        const rails = comps.find(c => c.name === 'rails');
+        assert.ok(rails, 'rails not found');
+        assert.equal(rails.version, '7.0.4');
+    });
+
+    test('dependency graph: rails depends on actionpack', () => {
+        const comps = parseGemfileLock(path.join(FIXTURES, 'Gemfile.lock'));
+        const rails = comps.find(c => c.name === 'rails');
+        assert.ok(rails.dependsOn.some(p => p.includes('actionpack')),
+            'rails.dependsOn missing actionpack');
+    });
+
+    test('transitive gem captured (concurrent-ruby via activesupport)', () => {
+        const comps = parseGemfileLock(path.join(FIXTURES, 'Gemfile.lock'));
+        assert.ok(comps.find(c => c.name === 'concurrent-ruby'), 'concurrent-ruby transitive not found');
+    });
+});
+
+describe('PHP parser', () => {
+    test('parses composer.lock and returns all packages', () => {
+        const comps = parseComposerLock(path.join(FIXTURES, 'composer.lock'));
+        assert.ok(comps.length >= 6, `expected >=6 components, got ${comps.length}`);
+    });
+
+    test('all components have valid composer purls', () => {
+        const comps = parseComposerLock(path.join(FIXTURES, 'composer.lock'));
+        for (const c of comps) {
+            assert.match(c.purl, /^pkg:composer\/.+@.+$/, `invalid purl: ${c.purl}`);
+        }
+    });
+
+    test('dev packages marked as dev scope', () => {
+        const comps = parseComposerLock(path.join(FIXTURES, 'composer.lock'));
+        const phpunit = comps.find(c => c.name === 'phpunit/phpunit');
+        assert.ok(phpunit, 'phpunit/phpunit not found');
+        assert.equal(phpunit.scope, 'dev');
+    });
+
+    test('runtime packages marked as required', () => {
+        const comps = parseComposerLock(path.join(FIXTURES, 'composer.lock'));
+        const guzzle = comps.find(c => c.name === 'guzzlehttp/guzzle');
+        assert.ok(guzzle, 'guzzlehttp/guzzle not found');
+        assert.equal(guzzle.scope, 'required');
+    });
+
+    test('dependency graph: guzzle depends on promises and psr7', () => {
+        const comps = parseComposerLock(path.join(FIXTURES, 'composer.lock'));
+        const guzzle = comps.find(c => c.name === 'guzzlehttp/guzzle');
+        assert.ok(guzzle.dependsOn.some(p => p.includes('promises')), 'missing guzzle→promises');
+        assert.ok(guzzle.dependsOn.some(p => p.includes('psr7')), 'missing guzzle→psr7');
+    });
+
+    test('MIT license extracted from packages array field', () => {
+        const comps = parseComposerLock(path.join(FIXTURES, 'composer.lock'));
+        const guzzle = comps.find(c => c.name === 'guzzlehttp/guzzle');
+        assert.ok(guzzle.licenses.length > 0, 'no license on guzzle');
+        assert.equal(guzzle.licenses[0], 'MIT');
+    });
+
+    test('SHA-1 dist hash stored', () => {
+        const comps = parseComposerLock(path.join(FIXTURES, 'composer.lock'));
+        const guzzle = comps.find(c => c.name === 'guzzlehttp/guzzle');
+        assert.ok(guzzle.hashes.length > 0, 'no hash on guzzle');
+        assert.equal(guzzle.hashes[0].alg, 'SHA-1');
+    });
+
+    test('skips php runtime and ext-* pseudo-packages', () => {
+        const comps = parseComposerLock(path.join(FIXTURES, 'composer.lock'));
+        // 'php' and 'ext-*' are not real packages — they must not appear as components
+        assert.ok(!comps.find(c => c.name === 'php'), '"php" should not be a component');
+        assert.ok(!comps.find(c => c.name.startsWith('ext-')), 'ext-* should not be components');
+        // Confirm they are also absent from all dependsOn edges
+        for (const c of comps) {
+            assert.ok(!c.dependsOn.some(p => /^pkg:composer\/php@/.test(p)),
+                'php pseudo-package purl should not appear in dependsOn');
+        }
     });
 });

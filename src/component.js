@@ -26,6 +26,10 @@ function makePurl(ecosystem, name, version) {
             return `pkg:maven/${name}@${version}`;
         case 'nuget':
             return `pkg:nuget/${name}@${version}`;
+        case 'gem':
+            return `pkg:gem/${name}@${version}`;
+        case 'composer':
+            return `pkg:composer/${name}@${version}`;
         default:
             return `pkg:generic/${name}@${version}`;
     }

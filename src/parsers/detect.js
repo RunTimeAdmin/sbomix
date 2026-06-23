@@ -20,7 +20,9 @@ const LOCK_FILE_PATTERNS = [
     { file: 'go.mod',            type: 'go-modules',  ecosystem: 'golang' },
     { file: 'pom.xml',           type: 'maven-pom',   ecosystem: 'maven'  },
     { file: 'gradle.lockfile',   type: 'gradle-lock', ecosystem: 'maven'  },
-    { file: 'packages.lock.json',type: 'nuget-lock',  ecosystem: 'nuget'  },
+    { file: 'packages.lock.json',type: 'nuget-lock',    ecosystem: 'nuget'    },
+    { file: 'Gemfile.lock',      type: 'gemfile-lock',  ecosystem: 'gem'      },
+    { file: 'composer.lock',     type: 'composer-lock', ecosystem: 'composer' },
 ];
 
 // Directories to skip when walking
@@ -87,13 +89,17 @@ function deduplicate(lockFiles) {
         const golang = group.find((f) => f.type === 'go-modules');
         // gradle.lockfile preferred over pom.xml — it has the full resolved graph
         const java   = pickBest(group.filter((f) => f.ecosystem === 'maven'), ['gradle-lock', 'maven-pom']);
-        const nuget  = group.find((f) => f.type === 'nuget-lock');
-        if (npm)    result.push(npm);
-        if (pypi)   result.push(pypi);
-        if (cargo)  result.push(cargo);
-        if (golang) result.push(golang);
-        if (java)   result.push(java);
-        if (nuget)  result.push(nuget);
+        const nuget    = group.find((f) => f.type === 'nuget-lock');
+        const gem      = group.find((f) => f.type === 'gemfile-lock');
+        const composer = group.find((f) => f.type === 'composer-lock');
+        if (npm)      result.push(npm);
+        if (pypi)     result.push(pypi);
+        if (cargo)    result.push(cargo);
+        if (golang)   result.push(golang);
+        if (java)     result.push(java);
+        if (nuget)    result.push(nuget);
+        if (gem)      result.push(gem);
+        if (composer) result.push(composer);
     }
     return result;
 }

@@ -69,6 +69,8 @@ Lock files are the resolved dependency graph. They're authoritative, determinist
 | **Java** | `pom.xml` | ✅ + `mvn` transitives | Resolves `${property}` vars |
 | **Java** | `gradle.lockfile` | ✅ Full graph | Scope-aware; requires `--write-locks` |
 | **.NET** | `packages.lock.json` | ✅ Full graph | SHA-512 hashes; requires `RestorePackagesWithLockFile` |
+| **Ruby** | `Gemfile.lock` | ✅ Full graph | SHA-1 checksums via Bundler |
+| **PHP** | `composer.lock` | ✅ Full graph | MIT/BSD licenses from package metadata |
 
 Monorepos are supported — PackrAI recurses up to 4 directories deep and deduplicates lock files per directory.
 
@@ -277,6 +279,8 @@ packrai/
 │   │   ├── maven.js        pom.xml
 │   │   ├── gradle.js       gradle.lockfile
 │   │   ├── dotnet.js       packages.lock.json (NuGet)
+│   │   ├── ruby.js         Gemfile.lock
+│   │   ├── php.js          composer.lock
 │   │   ├── detect.js       Lock file auto-detection + deduplication
 │   │   └── index.js        Parser dispatcher
 │   ├── generators/
@@ -291,7 +295,7 @@ packrai/
 ├── Dockerfile              Multi-stage API server image
 ├── docker-compose.yml      API + Postgres stack
 ├── tests/
-│   ├── parsers.test.js     Parser unit tests (36 tests)
+│   ├── parsers.test.js     Parser unit tests (56 tests)
 │   └── fixtures/           Sample lock files for testing
 ├── examples/
 │   └── github-workflow.yml Copy-paste GitHub Actions workflow

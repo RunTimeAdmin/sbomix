@@ -1,0 +1,110 @@
+{
+    "_readme": ["This file is @generated automatically"],
+    "content-hash": "abc123def456",
+    "packages": [
+        {
+            "name": "guzzlehttp/guzzle",
+            "version": "7.7.0",
+            "description": "Guzzle is a PHP HTTP client library",
+            "require": {
+                "php": "^7.2.5 || ^8.0",
+                "guzzlehttp/promises": "^2.0",
+                "guzzlehttp/psr7": "^2.4",
+                "psr/http-client": "^1.0"
+            },
+            "license": ["MIT"],
+            "dist": {
+                "type": "zip",
+                "shasum": "fb7566caccf22d74d1ab270de3551f72a58399f5"
+            }
+        },
+        {
+            "name": "guzzlehttp/promises",
+            "version": "2.0.1",
+            "description": "Guzzle promises library",
+            "require": {
+                "php": ">=7.2.5"
+            },
+            "license": ["MIT"],
+            "dist": {
+                "type": "zip",
+                "shasum": "111166291a0f8130dab8dc31b6e6b5bc1e3be7b0"
+            }
+        },
+        {
+            "name": "guzzlehttp/psr7",
+            "version": "2.6.0",
+            "description": "PSR-7 message implementation",
+            "require": {
+                "php": "^7.2.5 || ^8.0",
+                "psr/http-message": "^1.1 || ^2.0"
+            },
+            "license": ["MIT"],
+            "dist": {
+                "type": "zip",
+                "shasum": "8bd7c33aac6cf89c7a702d3e39e92a37c9c2aced"
+            }
+        },
+        {
+            "name": "psr/http-client",
+            "version": "1.0.3",
+            "description": "Common interface for HTTP clients",
+            "require": {
+                "php": "^7.0 || ^8.0",
+                "psr/http-message": "^1.0 || ^2.0"
+            },
+            "license": ["MIT"],
+            "dist": {
+                "type": "zip",
+                "shasum": "bb5906eecda0d5dfa2e5d8b41b1e2deeb4e3aba1"
+            }
+        },
+        {
+            "name": "psr/http-message",
+            "version": "2.0",
+            "description": "Common interface for HTTP messages",
+            "require": {
+                "php": "^7.2 || ^8.0"
+            },
+            "license": ["MIT"],
+            "dist": {
+                "type": "zip",
+                "shasum": "402d35bcb92c70c026d1a6a9883f06b2ead23d71"
+            }
+        }
+    ],
+    "packages-dev": [
+        {
+            "name": "phpunit/phpunit",
+            "version": "10.5.0",
+            "description": "The PHP Unit Testing framework",
+            "require": {
+                "php": ">=8.1",
+                "phpunit/php-code-coverage": "^10.1"
+            },
+            "license": ["BSD-3-Clause"],
+            "dist": {
+                "type": "zip",
+                "shasum": "dev123abc456def789012345678901234567890ab"
+            }
+        },
+        {
+            "name": "phpunit/php-code-coverage",
+            "version": "10.1.6",
+            "description": "Library that provides collection and processing of PHP code coverage",
+            "require": {
+                "php": ">=8.1"
+            },
+            "license": ["BSD-3-Clause"],
+            "dist": {
+                "type": "zip",
+                "shasum": "dev456def789012345678901234567890abcdef01"
+            }
+        }
+    ],
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "platform": {},
+    "platform-dev": {},
+    "plugin-api-version": "2.6.0"
+}

@@ -8,6 +8,8 @@ const { parsePnpmLock }  = require('./pnpm');
 const { parsePomXml }        = require('./maven');
 const { parseGradleLock }    = require('./gradle');
 const { parsePackagesLock }  = require('./dotnet');
+const { parseGemfileLock }   = require('./ruby');
+const { parseComposerLock }  = require('./php');
 const path = require('path');
 
 /**
@@ -27,7 +29,9 @@ function parseLockFile(lockFile) {
         case 'go-modules':  return parseGoModules(path.dirname(lockFile.path));
         case 'maven-pom':   return parsePomXml(lockFile.path);
         case 'gradle-lock': return parseGradleLock(lockFile.path);
-        case 'nuget-lock':  return parsePackagesLock(lockFile.path);
+        case 'nuget-lock':    return parsePackagesLock(lockFile.path);
+        case 'gemfile-lock':  return parseGemfileLock(lockFile.path);
+        case 'composer-lock': return parseComposerLock(lockFile.path);
         default:
             console.warn(`[packrai] Unknown lock file type: ${lockFile.type}`);
             return [];
