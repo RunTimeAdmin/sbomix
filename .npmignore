@@ -1,0 +1,18 @@
+# Stray files
+*.txt
+
+# Development / CI — not needed by npm consumers
+.env
+.env.*
+.eslintrc.json
+.github/
+docker-compose.yml
+Dockerfile
+scripts/
+tests/
+PACKRAI_review.md
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log

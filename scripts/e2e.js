@@ -191,6 +191,83 @@ async function main() {
             : err(`Second ingest → ${status}: ${JSON.stringify(body)}`);
     }
 
+    // ── 11. Create a scoped ingest-only key ──────────────────────────────────
+    info('11. Create scoped API key');
+    let scopedKey;
+    let scopedKeyId;
+    {
+        const { status, body } = await req(
+            'POST', '/api/v1/keys',
+            { name: 'ci-ingest-only', scopes: ['sbom:ingest'] },
+            authHeader
+        );
+        if (status === 201 && body.api_key && body.scopes?.includes('sbom:ingest')) {
+            ok(`POST /api/v1/keys → 201, name: ${body.name}, scopes: ${body.scopes.join(',')}`);
+            scopedKey   = body.api_key;
+            scopedKeyId = body.id;
+        } else {
+            err(`POST /api/v1/keys → ${status}: ${JSON.stringify(body)}`);
+        }
+    }
+
+    // ── 12. Scoped key: ingest allowed, read blocked ─────────────────────────
+    info('12. Scope enforcement');
+    if (scopedKey) {
+        const scopedAuth = { Authorization: `Bearer ${scopedKey}` };
+
+        // ingest-only key CAN ingest
+        const { status: ingestStatus } = await req(
+            'POST', '/api/v1/ingest',
+            { app: 'packrai', version: '0.1.0-scoped', cyclonedx: sbomResult.cyclonedx, stats: sbomResult.stats },
+            scopedAuth
+        );
+        ingestStatus === 201
+            ? ok('Ingest-only key can POST /api/v1/ingest → 201')
+            : err(`Ingest-only key ingest failed → ${ingestStatus}`);
+
+        // ingest-only key CANNOT read apps
+        const { status: readStatus } = await req('GET', '/api/v1/apps', null, scopedAuth);
+        readStatus === 403
+            ? ok('Ingest-only key blocked from GET /api/v1/apps → 403')
+            : err(`Expected 403 for read, got ${readStatus}`);
+    } else {
+        err('Skipped scope enforcement test (key creation failed)');
+    }
+
+    // ── 13. List keys ────────────────────────────────────────────────────────
+    info('13. List API keys');
+    {
+        const { status, body } = await req('GET', '/api/v1/keys', null, authHeader);
+        if (status === 200 && Array.isArray(body.keys)) {
+            ok(`GET /api/v1/keys → 200, ${body.keys.length} key(s)`);
+        } else {
+            err(`GET /api/v1/keys → ${status}: ${JSON.stringify(body)}`);
+        }
+    }
+
+    // ── 14. Revoke the scoped key ────────────────────────────────────────────
+    info('14. Revoke scoped key');
+    if (scopedKeyId) {
+        const { status, body } = await req('DELETE', `/api/v1/keys/${scopedKeyId}`, null, authHeader);
+        if (status === 200 && body.revoked) {
+            ok(`DELETE /api/v1/keys/${scopedKeyId} → 200 revoked`);
+        } else {
+            err(`DELETE /api/v1/keys → ${status}: ${JSON.stringify(body)}`);
+        }
+
+        // Revoked key must no longer work
+        const { status: revokedStatus } = await req(
+            'POST', '/api/v1/ingest',
+            { app: 'test', cyclonedx: sbomResult.cyclonedx },
+            { Authorization: `Bearer ${scopedKey}` }
+        );
+        revokedStatus === 401
+            ? ok('Revoked key correctly rejected → 401')
+            : err(`Expected 401 for revoked key, got ${revokedStatus}`);
+    } else {
+        err('Skipped revocation test (key creation failed)');
+    }
+
     // ── Results ──────────────────────────────────────────────────────────────
     console.log(`\n  ${'─'.repeat(40)}`);
     if (fail === 0) {
