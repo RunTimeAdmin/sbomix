@@ -4,7 +4,7 @@ const fs   = require('fs');
 const path = require('path');
 const { XMLParser }     = require('fast-xml-parser');
 const { spawnSync }     = require('child_process');
-const { createComponent, makePurl } = require('../component');
+const { createComponent } = require('../component');
 
 const PARSER = new XMLParser({ ignoreAttributes: false, isArray: (name) => name === 'dependency' });
 

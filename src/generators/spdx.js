@@ -29,8 +29,11 @@ function generateSPDX(components, meta = {}) {
     const docName = `${meta.name || 'unknown'}-${meta.version || '0.0.0'}`;
     const namespace = `https://packrai.xyz/sbom/${docName}-${shortHash()}`;
 
-    const packages = deduped.map(spdxPackage);
-    const relationships = buildRelationships(deduped, docName);
+    // Compute SPDX IDs once — reused by packages and relationships
+    const spdxIds = new Map(deduped.map((c) => [c.purl, `SPDXRef-${sanitizeSpdxId(c.purl)}`]));
+
+    const packages = deduped.map((comp) => spdxPackage(comp, spdxIds.get(comp.purl)));
+    const relationships = buildRelationships(deduped, spdxIds);
 
     return {
         spdxVersion: SPDX_VERSION,
@@ -51,8 +54,7 @@ function generateSPDX(components, meta = {}) {
     };
 }
 
-function spdxPackage(comp) {
-    const spdxId = `SPDXRef-${sanitizeSpdxId(comp.purl)}`;
+function spdxPackage(comp, spdxId) {
     const pkg = {
         SPDXID: spdxId,
         name: comp.name,
@@ -88,28 +90,25 @@ function spdxPackage(comp) {
     return pkg;
 }
 
-function buildRelationships(components, docName) {
+function buildRelationships(components, spdxIds) {
     const rels = [];
 
-    // Document DESCRIBES all top-level (direct) components
     for (const comp of components) {
         if (comp.scope === 'required' || comp.scope === 'dev') {
             rels.push({
                 spdxElementId: 'SPDXRef-DOCUMENT',
                 relationshipType: 'DESCRIBES',
-                relatedSpdxElement: `SPDXRef-${sanitizeSpdxId(comp.purl)}`,
+                relatedSpdxElement: spdxIds.get(comp.purl),
             });
         }
     }
 
-    // Component DEPENDS_ON relationships
-    const purlToSpdxId = new Map(components.map((c) => [c.purl, `SPDXRef-${sanitizeSpdxId(c.purl)}`]));
     for (const comp of components) {
         for (const depPurl of (comp.dependsOn || [])) {
-            const depId = purlToSpdxId.get(depPurl);
+            const depId = spdxIds.get(depPurl);
             if (depId) {
                 rels.push({
-                    spdxElementId: `SPDXRef-${sanitizeSpdxId(comp.purl)}`,
+                    spdxElementId: spdxIds.get(comp.purl),
                     relationshipType: 'DEPENDS_ON',
                     relatedSpdxElement: depId,
                 });

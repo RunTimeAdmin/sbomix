@@ -9,7 +9,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const { detect } = require('./parsers/detect');
 const { parseLockFile } = require('./parsers/index');
 const { enrichWithOSV } = require('./osv');
@@ -28,6 +27,7 @@ const { generateSPDX } = require('./generators/spdx');
  * @param {boolean} [opts.vulns]     - run OSV vulnerability enrichment (default: true)
  * @param {boolean} [opts.licenses]  - run deps.dev license enrichment (default: true)
  * @param {boolean} [opts.recursive] - walk subdirs for monorepos (default: true)
+ * @param {string}  [opts.format]    - 'both' | 'cyclonedx' | 'spdx' (default: 'both')
  */
 async function generateFromDirectory(dir, opts = {}) {
     const startMs = Date.now();
@@ -35,6 +35,9 @@ async function generateFromDirectory(dir, opts = {}) {
     const version = opts.version || 'unknown';
     const runVulns    = opts.vulns    !== false;
     const runLicenses = opts.licenses !== false;
+    const fmt = opts.format || 'both';
+    const wantCDX  = fmt !== 'spdx';
+    const wantSPDX = fmt !== 'cyclonedx';
 
     // 1. Detect lock files
     const lockFiles = detect(dir, { recursive: opts.recursive !== false });
@@ -58,22 +61,23 @@ async function generateFromDirectory(dir, opts = {}) {
         runVulns    && allComponents.length > 0 ? enrichWithOSV(allComponents)      : null,
     ]);
 
-    // 4. Generate both formats
+    // 4. Generate only requested formats
     const meta = { name, version, author: opts.author };
-    const cyclonedx = generateCycloneDX(allComponents, meta);
-    const spdx = generateSPDX(allComponents, meta);
+    let cyclonedx, spdx;
 
-    // Self-check: our own CycloneDX output must always pass structural validation.
-    // This catches regressions in the generator before the caller writes files.
-    const cdxCheck = validateCycloneDX(cyclonedx);
-    if (!cdxCheck.valid) {
-        throw new Error(`CycloneDX generator produced invalid output: ${cdxCheck.errors.join('; ')}`);
+    if (wantCDX) {
+        cyclonedx = generateCycloneDX(allComponents, meta);
+        const cdxCheck = validateCycloneDX(cyclonedx);
+        if (!cdxCheck.valid) {
+            throw new Error(`CycloneDX generator produced invalid output: ${cdxCheck.errors.join('; ')}`);
+        }
+    }
+    if (wantSPDX) {
+        spdx = generateSPDX(allComponents, meta);
     }
 
     const elapsedMs = Date.now() - startMs;
-    const vulnCount = allComponents.reduce((n, c) => n + (c.vulnerabilities ? c.vulnerabilities.length : 0), 0);
-    const criticalCount = allComponents.reduce((n, c) =>
-        n + (c.vulnerabilities || []).filter((v) => v.severity === 'CRITICAL').length, 0);
+    const { vulnCount, criticalCount } = countVulns(allComponents);
 
     return {
         cyclonedx,
@@ -115,14 +119,28 @@ function writeOutputs(result, outDir) {
  * 25 pts  — all components have a known license (not NOASSERTION)
  * 25 pts  — all lock files are high-fidelity (not requirements.txt fallbacks)
  */
+function countVulns(components) {
+    let vulnCount = 0, criticalCount = 0;
+    for (const c of components) {
+        for (const v of (c.vulnerabilities || [])) {
+            vulnCount++;
+            if (v.severity === 'CRITICAL') criticalCount++;
+        }
+    }
+    return { vulnCount, criticalCount };
+}
+
 function computeQualityScore(components, lockFiles) {
     if (!components.length) return 0;
 
-    const withPurl    = components.filter((c) => c.purl && !c.purl.includes('NOASSERTION')).length;
-    const withHash    = components.filter((c) => c.hashes && c.hashes.length > 0).length;
     const NOASSERT = new Set(['NOASSERTION', 'UNKNOWN', null, undefined, '']);
-    const withLicense = components.filter((c) =>
-        c.licenses?.length > 0 && !NOASSERT.has(c.licenses[0])).length;
+    let withPurl = 0, withHash = 0, withLicense = 0;
+
+    for (const c of components) {
+        if (c.purl && !c.purl.includes('NOASSERTION')) withPurl++;
+        if (c.hashes?.length) withHash++;
+        if (c.licenses?.length && !NOASSERT.has(c.licenses[0])) withLicense++;
+    }
 
     const weakCount = lockFiles.filter((lf) => lf.type === 'requirements-txt').length;
     const strongFraction = lockFiles.length > 0

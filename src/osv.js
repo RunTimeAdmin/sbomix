@@ -28,14 +28,33 @@ const OSV_ECOSYSTEM = {
 async function enrichWithOSV(components, opts = {}) {
     const timeout = opts.timeout || 10_000;
 
-    // Only query ecosystems we know how to map
-    const queryable = components.filter((c) => OSV_ECOSYSTEM[c.ecosystem]);
-    if (queryable.length === 0) return;
+    // Deduplicate by ecosystem:name@version — common in monorepos with shared deps.
+    // We query each unique package once and fan results back to all duplicates.
+    const groups = new Map();
+    for (const comp of components) {
+        if (!OSV_ECOSYSTEM[comp.ecosystem]) continue;
+        const key = `${comp.ecosystem}:${comp.name}@${comp.version}`;
+        const existing = groups.get(key);
+        if (existing) {
+            existing.targets.push(comp);
+        } else {
+            groups.set(key, { representative: comp, targets: [comp] });
+        }
+    }
+    if (groups.size === 0) return;
 
-    // OSV batch limit is 1000 queries per request
-    for (let i = 0; i < queryable.length; i += 1000) {
-        const batch = queryable.slice(i, i + 1000);
-        await queryBatch(batch, timeout);
+    const unique = [...groups.values()].map((g) => g.representative);
+
+    for (let i = 0; i < unique.length; i += 1000) {
+        await queryBatch(unique.slice(i, i + 1000), timeout);
+    }
+
+    // Fan vulnerability results from the representative back to all duplicates
+    for (const { representative, targets } of groups.values()) {
+        const vulns = representative.vulnerabilities || [];
+        for (const target of targets) {
+            if (target !== representative) target.vulnerabilities = vulns;
+        }
     }
 }
 
@@ -119,7 +138,7 @@ function extractCVSS(vuln) {
     return v3 ? v3.score : null;
 }
 
-function extractFixes(vuln, pkgName) {
+function extractFixes(vuln, _pkgName) {
     const fixes = [];
     for (const affected of (vuln.affected || [])) {
         for (const range of (affected.ranges || [])) {

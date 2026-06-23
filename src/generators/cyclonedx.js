@@ -31,6 +31,7 @@ function generateCycloneDX(components, meta = {}) {
     const deduped = deduplicateComponents(components);
 
     const bom = {
+        '$schema': CDX_SCHEMA,
         bomFormat: 'CycloneDX',
         specVersion: CDX_SPEC_VERSION,
         serialNumber,

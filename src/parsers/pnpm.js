@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const yaml = require('yaml');
-const { createComponent, makePurl, parseIntegritySRI } = require('../component');
+const { createComponent, parseIntegritySRI } = require('../component');
 
 /**
  * Parse pnpm-lock.yaml
@@ -46,11 +46,14 @@ function parsePnpmV9(data) {
         components.push(comp);
     }
 
+    // Build lookup index for O(1) component resolution in the next two passes
+    const compByKey = new Map(components.map(c => [`${c.name}@${c.version}`, c]));
+
     // Second pass: wire dependency edges from snapshots
     for (const [key, snap] of Object.entries(snapshots)) {
         if (!snap.dependencies) continue;
         const { name, version } = splitKey(key);
-        const comp = components.find(c => c.name === name && c.version === version);
+        const comp = compByKey.get(`${name}@${version}`);
         if (!comp) continue;
 
         for (const [depName, depVer] of Object.entries(snap.dependencies)) {
@@ -61,7 +64,7 @@ function parsePnpmV9(data) {
 
     // Mark dev deps from importers
     for (const importer of Object.values(importers)) {
-        markDevDeps(importer.devDependencies || {}, components, purlMap);
+        markDevDeps(importer.devDependencies || {}, compByKey);
     }
 
     return components;
@@ -112,13 +115,14 @@ function parsePnpmV6(data) {
     }
 
     // Mark dev deps declared at root (catches cases pkg.dev wasn't set)
+    const compByKeyV6 = new Map(components.map(c => [`${c.name}@${c.version}`, c]));
     const importers = data.importers || {};
     if (Object.keys(importers).length > 0) {
         for (const importer of Object.values(importers)) {
-            markDevDeps(importer.devDependencies || {}, components, purlMap);
+            markDevDeps(importer.devDependencies || {}, compByKeyV6);
         }
     } else {
-        markDevDeps(data.devDependencies || {}, components, purlMap);
+        markDevDeps(data.devDependencies || {}, compByKeyV6);
     }
 
     return components;
@@ -146,10 +150,10 @@ function splitKey(key) {
     return { name: clean.slice(0, idx), version: clean.slice(idx + 1) };
 }
 
-function markDevDeps(devDeps, components, purlMap) {
+function markDevDeps(devDeps, compByKey) {
     for (const [name, spec] of Object.entries(devDeps)) {
         const ver  = typeof spec === 'object' ? spec.version : spec;
-        const comp = components.find(c => c.name === name && c.version === ver);
+        const comp = compByKey.get(`${name}@${ver}`);
         if (comp) comp.scope = 'dev';
     }
 }

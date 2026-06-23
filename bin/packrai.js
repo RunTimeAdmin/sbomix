@@ -98,6 +98,7 @@ program
                 vulns:     opts.vulns,
                 licenses:  opts.licenses,
                 recursive: opts.recursive,
+                format:    opts.format,
             });
 
             const { stats } = result;

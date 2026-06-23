@@ -21,7 +21,20 @@ if (!process.env.HMAC_SECRET) {
 const app = express();
 
 // ── Security headers ──────────────────────────────────────────────────────────
-app.use(helmet());
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc:  ["'self'"],
+            scriptSrc:   ["'self'", "'unsafe-inline'"],   // dashboard inline scripts
+            styleSrc:    ["'self'", "'unsafe-inline'"],
+            connectSrc:  ["'self'"],
+            imgSrc:      ["'self'", 'data:'],
+            fontSrc:     ["'self'"],
+            objectSrc:   ["'none'"],
+            frameSrc:    ["'none'"],
+        },
+    },
+}));
 app.disable('x-powered-by');
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
@@ -66,6 +79,18 @@ function generateApiKey() {
     return crypto.randomBytes(32).toString('hex');
 }
 
+// Throttle last_used_at writes — one DB write per key per 5 minutes max
+const lastUsedCache = new Map();
+const LAST_USED_TTL = 5 * 60 * 1000;
+
+function maybeUpdateLastUsed(keyHash) {
+    const now = Date.now();
+    if (now - (lastUsedCache.get(keyHash) || 0) < LAST_USED_TTL) return;
+    lastUsedCache.set(keyHash, now);
+    db.query('UPDATE api_keys SET last_used_at = NOW() WHERE key_hash = $1', [keyHash])
+        .catch(() => {});
+}
+
 // ── Auth middleware factory ───────────────────────────────────────────────────
 // requireScope(scope) returns an Express middleware that:
 //   1. Checks the api_keys table (scoped, rotatable keys)
@@ -103,9 +128,7 @@ function requireScope(scope) {
                     });
                 }
                 req.org = { id: org_id, name: org_name };
-                // Update last_used_at async — don't block the request
-                db.query('UPDATE api_keys SET last_used_at = NOW() WHERE key_hash = $1', [keyHash])
-                    .catch(() => {});
+                maybeUpdateLastUsed(keyHash);
                 return next();
             }
 
@@ -141,29 +164,45 @@ async function osvEnrichAsync(orgId, cdxComponents, purlToCompId) {
 
     await enrichWithOSV(components, { timeout: 20000 });
 
+    const vulnRows = [];
     for (const comp of components) {
         if (!comp.vulnerabilities?.length) continue;
         const compId = purlToCompId.get(comp.purl);
         if (!compId) continue;
-
         for (const v of comp.vulnerabilities) {
-            const cveId       = v.aliases?.find(a => a.startsWith('CVE-')) ?? null;
-            const cvssScore   = (v.cvss && !isNaN(parseFloat(v.cvss))) ? parseFloat(v.cvss) : null;
-            const fixedVersion = v.fixedIn?.[0] ?? null;
-
-            await db.query(
-                `INSERT INTO vulnerabilities
-                   (component_id, org_id, osv_id, cve_id, severity, cvss_score, fixed_version, title)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-                 ON CONFLICT (component_id, osv_id) DO UPDATE
-                   SET severity     = EXCLUDED.severity,
-                       cvss_score   = COALESCE(EXCLUDED.cvss_score, vulnerabilities.cvss_score),
-                       last_checked = NOW()`,
-                [compId, orgId, v.id, cveId,
-                 v.severity === 'UNKNOWN' ? null : v.severity,
-                 cvssScore, fixedVersion, v.summary || null]
-            );
+            vulnRows.push({
+                compId,
+                osvId:        v.id,
+                cveId:        v.aliases?.find(a => a.startsWith('CVE-')) ?? null,
+                severity:     v.severity === 'UNKNOWN' ? null : v.severity,
+                cvssScore:    (v.cvss && !isNaN(parseFloat(v.cvss))) ? parseFloat(v.cvss) : null,
+                fixedVersion: v.fixedIn?.[0] ?? null,
+                title:        v.summary || null,
+            });
         }
+    }
+
+    if (vulnRows.length) {
+        await db.query(
+            `INSERT INTO vulnerabilities
+               (component_id, org_id, osv_id, cve_id, severity, cvss_score, fixed_version, title)
+             SELECT $1, t.comp_id, t.osv_id, t.cve_id, t.severity, t.cvss_score, t.fixed_version, t.title
+             FROM UNNEST($2::uuid[], $3::text[], $4::text[], $5::text[], $6::numeric[], $7::text[], $8::text[])
+                  AS t(comp_id, osv_id, cve_id, severity, cvss_score, fixed_version, title)
+             ON CONFLICT (component_id, osv_id) DO UPDATE
+               SET severity      = EXCLUDED.severity,
+                   cvss_score    = COALESCE(EXCLUDED.cvss_score, vulnerabilities.cvss_score),
+                   fixed_version = COALESCE(EXCLUDED.fixed_version, vulnerabilities.fixed_version),
+                   last_checked  = NOW()`,
+            [orgId,
+             vulnRows.map(r => r.compId),
+             vulnRows.map(r => r.osvId),
+             vulnRows.map(r => r.cveId),
+             vulnRows.map(r => r.severity),
+             vulnRows.map(r => r.cvssScore),
+             vulnRows.map(r => r.fixedVersion),
+             vulnRows.map(r => r.title)]
+        );
     }
 }
 
@@ -194,6 +233,10 @@ app.post('/api/v1/ingest', ingestLimiter, requireScope('sbom:ingest'), async (re
     const cdxCheck = validateCycloneDX(cyclonedx);
     if (!cdxCheck.valid) {
         return res.status(400).json({ error: 'Invalid CycloneDX document', details: cdxCheck.errors });
+    }
+    const MAX_COMPONENTS = 10_000;
+    if ((cyclonedx.components?.length ?? 0) > MAX_COMPONENTS) {
+        return res.status(400).json({ error: `SBOM may not contain more than ${MAX_COMPONENTS} components` });
     }
     if (version  !== undefined && (typeof version  !== 'string' || version.length  > 100)) {
         return res.status(400).json({ error: 'version must be a string ≤ 100 characters' });
@@ -284,45 +327,67 @@ app.post('/api/v1/ingest', ingestLimiter, requireScope('sbom:ingest'), async (re
             const purlToCompId = new Map(compRows.map(r => [r.purl, r.id]));
 
             // ── Bulk insert sbom_components ───────────────────────────────────
-            const compIds   = components.map(c => purlToCompId.get(c.purl)).filter(Boolean);
-            const scopeVals = components.map(c => c.scope ?? 'required');
-            const directs   = components.map(c => directPurls.has(c.purl));
+            // Build rows as objects first so compId, scope, and is_direct stay aligned
+            // even if some purls are missing from the RETURNING results.
+            const linkRows = components
+                .map(c => ({
+                    id:     purlToCompId.get(c.purl),
+                    scope:  c.scope ?? 'required',
+                    direct: directPurls.has(c.purl),
+                }))
+                .filter(r => r.id);
 
-            await client.query(
-                `INSERT INTO sbom_components (sbom_id, component_id, scope, is_direct)
-                 SELECT $1, t.comp_id, t.scope, t.is_direct
-                 FROM UNNEST($2::uuid[], $3::text[], $4::boolean[])
-                      AS t(comp_id, scope, is_direct)
-                 ON CONFLICT DO NOTHING`,
-                [sbomId, compIds, scopeVals, directs]
-            );
+            if (linkRows.length) {
+                await client.query(
+                    `INSERT INTO sbom_components (sbom_id, component_id, scope, is_direct)
+                     SELECT $1, t.comp_id, t.scope, t.is_direct
+                     FROM UNNEST($2::uuid[], $3::text[], $4::boolean[])
+                          AS t(comp_id, scope, is_direct)
+                     ON CONFLICT DO NOTHING`,
+                    [sbomId,
+                     linkRows.map(r => r.id),
+                     linkRows.map(r => r.scope),
+                     linkRows.map(r => r.direct)]
+                );
+            }
 
-            // ── Vulnerabilities (CycloneDX 1.6 top-level array) ───────────────
+            // ── Vulnerabilities (CycloneDX 1.6 top-level array) ── bulk insert ─
+            const vulnRows = [];
             for (const v of (cyclonedx.vulnerabilities || [])) {
-                const osvId  = v.id;
-                const cveId  = v.advisories?.find(a => a.title?.startsWith('CVE-'))?.title
-                            || (osvId?.startsWith('CVE-') ? osvId : null);
+                const osvId = v.id;
+                const cveId = v.advisories?.find(a => a.title?.startsWith('CVE-'))?.title
+                           || (osvId?.startsWith('CVE-') ? osvId : null);
                 const rating = v.ratings?.[0];
-
                 for (const affected of (v.affects || [])) {
                     const compId = purlToCompId.get(affected.ref);
                     if (!compId) continue;
-
-                    await client.query(
-                        `INSERT INTO vulnerabilities
-                           (component_id, org_id, osv_id, cve_id, severity, cvss_score, fixed_version, title)
-                         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-                         ON CONFLICT (component_id, osv_id) DO UPDATE
-                           SET severity     = EXCLUDED.severity,
-                               cvss_score   = EXCLUDED.cvss_score,
-                               last_checked = NOW()`,
-                        [compId, req.org.id, osvId, cveId,
-                         rating?.severity?.toUpperCase() ?? null,
-                         rating?.score ?? null,
-                         null,
-                         v.description || null]
-                    );
+                    vulnRows.push({
+                        compId, osvId, cveId,
+                        severity:  rating?.severity?.toUpperCase() ?? null,
+                        cvssScore: rating?.score ?? null,
+                        title:     v.description || null,
+                    });
                 }
+            }
+            if (vulnRows.length) {
+                await client.query(
+                    `INSERT INTO vulnerabilities
+                       (component_id, org_id, osv_id, cve_id, severity, cvss_score, fixed_version, title)
+                     SELECT $1, t.comp_id, t.osv_id, t.cve_id, t.severity, t.cvss_score, NULL, t.title
+                     FROM UNNEST($2::uuid[], $3::text[], $4::text[], $5::text[], $6::numeric[], $7::text[])
+                          AS t(comp_id, osv_id, cve_id, severity, cvss_score, title)
+                     ON CONFLICT (component_id, osv_id) DO UPDATE
+                       SET severity     = EXCLUDED.severity,
+                           cvss_score   = EXCLUDED.cvss_score,
+                           last_checked = NOW()`,
+                    [req.org.id,
+                     vulnRows.map(r => r.compId),
+                     vulnRows.map(r => r.osvId),
+                     vulnRows.map(r => r.cveId),
+                     vulnRows.map(r => r.severity),
+                     vulnRows.map(r => r.cvssScore),
+                     vulnRows.map(r => r.title)]
+                );
             }
 
             return { sbomId, purlToCompId };
@@ -555,9 +620,12 @@ app.delete('/api/v1/keys/:id', requireScope('org:admin'), async (req, res) => {
 
 // ── Org provisioning (admin key only) ────────────────────────────────────────
 // POST /api/v1/orgs   body: { name }
-// Protected by ADMIN_KEY — never expose on the public internet.
-// Issues an org:admin key stored in organizations.api_key (legacy slot).
+// Disabled by default. Set ENABLE_ADMIN_API=true to activate.
+// Never expose on the public internet without IP allowlisting.
 app.post('/api/v1/orgs', async (req, res) => {
+    if (!process.env.ENABLE_ADMIN_API) {
+        return res.status(404).json({ error: 'Not found' });
+    }
     const adminKey = req.headers['x-admin-key'];
     if (!adminKey || adminKey !== process.env.ADMIN_KEY) {
         return res.status(403).json({ error: 'Forbidden' });

@@ -27,6 +27,9 @@ const LOCK_FILE_PATTERNS = [
     { file: 'pubspec.lock',       type: 'pubspec-lock',  ecosystem: 'pub'      },
 ];
 
+// O(1) lookup map built once at module load — avoids linear scan per directory entry
+const LOCK_FILE_BY_NAME = new Map(LOCK_FILE_PATTERNS.map((p) => [p.file, p]));
+
 // Directories to skip when walking
 const SKIP_DIRS = new Set([
     'node_modules', '.git', 'vendor', 'dist', 'build', 'target',
@@ -66,7 +69,7 @@ function walk(dir, found, depth, maxDepth, recursive) {
             continue;
         }
 
-        const pattern = LOCK_FILE_PATTERNS.find((p) => p.file === entry.name);
+        const pattern = LOCK_FILE_BY_NAME.get(entry.name);
         if (pattern) {
             found.push({ ...pattern, path: path.join(dir, entry.name) });
         }

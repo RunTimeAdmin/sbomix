@@ -38,7 +38,6 @@ function parseV3(data) {
         const parts = path.split('node_modules/').filter(Boolean);
         const name = parts[parts.length - 1].replace(/\/$/, '');
         const version = pkg.version;
-        const purl = makePurl('npm', name, version);
 
         if (byPath.has(path)) continue; // dedupe hoisted copies
 
