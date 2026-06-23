@@ -292,6 +292,32 @@ app.post('/api/v1/ingest', ingestLimiter, requireScope('sbom:ingest'), async (re
             );
             const sbomId = sbomRes.rows[0].id;
 
+            // Materialise latest-SBOM pointer so read endpoints skip DISTINCT ON / LATERAL.
+            // WHERE guard prevents an out-of-order ingest from overwriting a newer row.
+            await client.query(
+                `INSERT INTO app_latest_sboms
+                   (app_id, org_id, sbom_id, created_at,
+                    component_count, vulnerability_count, critical_count, quality_score, ecosystems)
+                 VALUES ($1,$2,$3,NOW(),$4,$5,$6,$7,$8)
+                 ON CONFLICT (app_id) DO UPDATE
+                   SET sbom_id             = EXCLUDED.sbom_id,
+                       created_at          = EXCLUDED.created_at,
+                       component_count     = EXCLUDED.component_count,
+                       vulnerability_count = EXCLUDED.vulnerability_count,
+                       critical_count      = EXCLUDED.critical_count,
+                       quality_score       = EXCLUDED.quality_score,
+                       ecosystems          = EXCLUDED.ecosystems
+                 WHERE app_latest_sboms.created_at <= EXCLUDED.created_at`,
+                [
+                    appId, req.org.id, sbomId,
+                    stats?.totalComponents ?? 0,
+                    stats?.vulnerabilities ?? 0,
+                    stats?.critical ?? 0,
+                    stats?.qualityScore ?? null,
+                    stats?.ecosystems ?? [],
+                ]
+            );
+
             // Direct dependency set: components in the root's dependsOn list
             const rootPurl    = cyclonedx.metadata?.component?.purl;
             const directPurls = new Set(
@@ -411,14 +437,15 @@ app.get('/api/v1/apps', requireScope('sbom:read'), async (req, res) => {
     try {
         const { rows } = await db.query(
             `SELECT a.id, a.name, a.repo_url,
-                    COUNT(s.id) AS sbom_count,
-                    MAX(s.created_at) AS last_scanned,
-                    (SELECT critical_count FROM sboms WHERE app_id = a.id
-                     ORDER BY created_at DESC LIMIT 1) AS critical_count
+                    COUNT(s.id)      AS sbom_count,
+                    ls.created_at    AS last_scanned,
+                    ls.critical_count
              FROM applications a
-             LEFT JOIN sboms s ON s.app_id = a.id
+             LEFT JOIN sboms s             ON s.app_id = a.id
+             LEFT JOIN app_latest_sboms ls ON ls.app_id = a.id
              WHERE a.org_id = $1
-             GROUP BY a.id ORDER BY a.name`,
+             GROUP BY a.id, a.name, a.repo_url, ls.created_at, ls.critical_count
+             ORDER BY a.name`,
             [req.org.id]
         );
         res.json({ apps: rows });
@@ -456,24 +483,20 @@ app.get('/api/v1/search', requireScope('sbom:read'), async (req, res) => {
 
     try {
         const { rows } = await db.query(
-            `WITH latest AS (
-               SELECT DISTINCT ON (app_id) id AS sbom_id, app_id, version, created_at
-               FROM sboms WHERE org_id = $1
-               ORDER BY app_id, created_at DESC
-             )
-             SELECT
-               a.name           AS app,
-               l.version        AS app_version,
-               l.created_at     AS last_scanned,
+            `SELECT
+               a.name              AS app,
+               s.version           AS app_version,
+               ls.created_at       AS last_scanned,
                c.purl,
-               c.name           AS component,
-               c.version        AS component_version,
+               c.name              AS component,
+               c.version           AS component_version,
                v.osv_id, v.cve_id, v.severity, v.cvss_score, v.fixed_version, v.title
              FROM vulnerabilities v
-             JOIN components c       ON c.id = v.component_id
-             JOIN sbom_components sc ON sc.component_id = c.id
-             JOIN latest l           ON l.sbom_id = sc.sbom_id
-             JOIN applications a     ON a.id = l.app_id
+             JOIN components c          ON c.id = v.component_id
+             JOIN sbom_components sc    ON sc.component_id = c.id
+             JOIN app_latest_sboms ls   ON ls.sbom_id = sc.sbom_id
+             JOIN sboms s               ON s.id = ls.sbom_id
+             JOIN applications a        ON a.id = ls.app_id
              WHERE v.org_id = $1 AND (v.cve_id = $2 OR v.osv_id = $2)
              ORDER BY v.cvss_score DESC NULLS LAST, a.name`,
             [req.org.id, id]
@@ -490,18 +513,13 @@ app.get('/api/v1/report', requireScope('sbom:read'), async (req, res) => {
     try {
         const [topVulns, topApps, summary] = await Promise.all([
             db.query(
-                `WITH latest_sboms AS (
-                   SELECT DISTINCT ON (app_id) id AS sbom_id
-                   FROM sboms WHERE org_id = $1 ORDER BY app_id, created_at DESC
-                 )
-                 SELECT v.cve_id, v.osv_id, v.severity, v.cvss_score, v.title,
+                `SELECT v.cve_id, v.osv_id, v.severity, v.cvss_score, v.title,
                         COUNT(DISTINCT a.id) AS apps_affected
                  FROM vulnerabilities v
-                 JOIN components c       ON c.id = v.component_id
-                 JOIN sbom_components sc ON sc.component_id = c.id
-                 JOIN latest_sboms ls    ON ls.sbom_id = sc.sbom_id
-                 JOIN sboms s            ON s.id = ls.sbom_id
-                 JOIN applications a     ON a.id = s.app_id
+                 JOIN components c          ON c.id = v.component_id
+                 JOIN sbom_components sc    ON sc.component_id = c.id
+                 JOIN app_latest_sboms ls   ON ls.sbom_id = sc.sbom_id
+                 JOIN applications a        ON a.id = ls.app_id
                  WHERE v.org_id = $1 AND v.severity IN ('CRITICAL','HIGH')
                  GROUP BY v.cve_id, v.osv_id, v.severity, v.cvss_score, v.title
                  ORDER BY v.cvss_score DESC NULLS LAST, apps_affected DESC
@@ -509,14 +527,13 @@ app.get('/api/v1/report', requireScope('sbom:read'), async (req, res) => {
                 [req.org.id]
             ),
             db.query(
-                `SELECT a.name, s.critical_count, s.vulnerability_count,
-                        s.component_count, s.quality_score, s.created_at
-                 FROM applications a
-                 JOIN LATERAL (
-                   SELECT * FROM sboms WHERE app_id = a.id ORDER BY created_at DESC LIMIT 1
-                 ) s ON TRUE
-                 WHERE a.org_id = $1
-                 ORDER BY s.critical_count DESC, s.vulnerability_count DESC LIMIT 10`,
+                `SELECT a.name, ls.critical_count, ls.vulnerability_count,
+                        ls.component_count, ls.quality_score, ls.created_at
+                 FROM app_latest_sboms ls
+                 JOIN applications a ON a.id = ls.app_id
+                 WHERE ls.org_id = $1
+                 ORDER BY ls.critical_count DESC, ls.vulnerability_count DESC
+                 LIMIT 10`,
                 [req.org.id]
             ),
             db.query(
@@ -527,10 +544,10 @@ app.get('/api/v1/report', requireScope('sbom:read'), async (req, res) => {
                    SUM(CASE WHEN v.severity = 'CRITICAL' THEN 1 ELSE 0 END) AS critical,
                    SUM(CASE WHEN v.severity = 'HIGH'     THEN 1 ELSE 0 END) AS high
                  FROM applications a
-                 LEFT JOIN sboms s           ON s.app_id = a.id
-                 LEFT JOIN sbom_components sc ON sc.sbom_id = s.id
-                 LEFT JOIN components c      ON c.id = sc.component_id
-                 LEFT JOIN vulnerabilities v ON v.component_id = c.id
+                 LEFT JOIN app_latest_sboms ls  ON ls.app_id = a.id
+                 LEFT JOIN sbom_components sc   ON sc.sbom_id = ls.sbom_id
+                 LEFT JOIN components c         ON c.id = sc.component_id
+                 LEFT JOIN vulnerabilities v    ON v.component_id = c.id
                  WHERE a.org_id = $1`,
                 [req.org.id]
             ),

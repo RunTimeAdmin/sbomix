@@ -95,6 +95,25 @@ CREATE TABLE vulnerabilities (
     UNIQUE (component_id, osv_id)
 );
 
+-- ── Latest SBOM per app (materialised at ingest time) ────────────────────────
+-- Avoids DISTINCT ON / LATERAL in every read endpoint.
+-- Upserted inside the ingest transaction; guarded so out-of-order ingests
+-- cannot overwrite a newer row.
+CREATE TABLE app_latest_sboms (
+    app_id              UUID        PRIMARY KEY
+                                    REFERENCES applications(id) ON DELETE CASCADE,
+    org_id              UUID        NOT NULL
+                                    REFERENCES organizations(id) ON DELETE CASCADE,
+    sbom_id             UUID        NOT NULL
+                                    REFERENCES sboms(id) ON DELETE CASCADE,
+    created_at          TIMESTAMPTZ NOT NULL,
+    component_count     INT         NOT NULL DEFAULT 0,
+    vulnerability_count INT         NOT NULL DEFAULT 0,
+    critical_count      INT         NOT NULL DEFAULT 0,
+    quality_score       NUMERIC(5,2),
+    ecosystems          TEXT[]
+);
+
 -- ── Indexes ───────────────────────────────────────────────────────────────────
 CREATE INDEX idx_api_keys_org         ON api_keys(org_id);
 CREATE INDEX idx_api_keys_active      ON api_keys(key_hash) WHERE revoked_at IS NULL;
@@ -108,3 +127,4 @@ CREATE INDEX idx_vulns_component      ON vulnerabilities(component_id);
 CREATE INDEX idx_vulns_cve_org        ON vulnerabilities(org_id, cve_id) WHERE cve_id IS NOT NULL;
 CREATE INDEX idx_vulns_osv_org        ON vulnerabilities(org_id, osv_id);
 CREATE INDEX idx_vulns_severity_org   ON vulnerabilities(org_id, severity);
+CREATE INDEX idx_app_latest_sboms_org ON app_latest_sboms(org_id);
