@@ -9,26 +9,93 @@
  *   packrai owner/repo                     GitHub repo (default branch)
  *   packrai owner/repo@v1.2.0             GitHub repo at tag/branch
  *   packrai https://github.com/owner/repo  full GitHub URL
+ *   packrai diff <from.cdx.json> <to.cdx.json>   diff two local CycloneDX files
  *
- * Options:
- *   -o, --out <dir>       output directory (default: .)
- *   -n, --name <name>     project name override
- *   -v, --ver <version>   version override
- *   -a, --author <org>    author / org name
- *   --token <ghtoken>     GitHub token for private repos ($GITHUB_TOKEN)
- *   --no-vulns            skip OSV vulnerability lookup
- *   --no-recursive        do not recurse into subdirectories
- *   --format <fmt>        both | cyclonedx | spdx  (default: both)
- *   --json                machine-readable JSON summary to stdout
+ * Scan options:
+ *   -o, --out <dir>         output directory (default: .)
+ *   -n, --name <name>       project name override
+ *   -v, --ver <version>     version override
+ *   -a, --author <org>      author / org name
+ *   --token <ghtoken>       GitHub token for private repos ($GITHUB_TOKEN)
+ *   --no-vulns              skip OSV vulnerability lookup
+ *   --no-recursive          do not recurse into subdirectories
+ *   --format <fmt>          both | cyclonedx | spdx  (default: both)
+ *   --license-check         flag forbidden/restricted licenses; exit 1 if any found
+ *   --json                  machine-readable JSON summary to stdout
  */
 
-const { program } = require('commander');
-const path = require('path');
-const fs = require('fs');
+const { Command, program } = require('commander');
+const path  = require('path');
+const fs    = require('fs');
 const { generateFromDirectory } = require('../src/pipeline');
+const { diffCycloneDX } = require('../src/diff');
 const { isGitHubTarget, parseGitHubTarget, cloneRepo } = require('../src/github');
 const pkg = require('../package.json');
 
+// ── diff subcommand ───────────────────────────────────────────────────────────
+program.addCommand(
+    new Command('diff')
+        .description('Compare two CycloneDX SBOM files and show what changed')
+        .argument('<from>', 'Older SBOM (bom.cyclonedx.json)')
+        .argument('<to>',   'Newer SBOM (bom.cyclonedx.json)')
+        .option('--json', 'Machine-readable JSON output')
+        .action((fromPath, toPath, opts) => {
+            try {
+                const oldCdx = JSON.parse(fs.readFileSync(path.resolve(fromPath), 'utf8'));
+                const newCdx = JSON.parse(fs.readFileSync(path.resolve(toPath),   'utf8'));
+                const diff   = diffCycloneDX(oldCdx, newCdx);
+
+                if (opts.json) {
+                    console.log(JSON.stringify(diff, null, 2));
+                    process.exit(diff.summary.newVulnerabilities > 0 ? 1 : 0);
+                }
+
+                const ok   = (s) => `\x1b[32m✓\x1b[0m ${s}`;
+                const warn = (s) => `\x1b[33m⚠\x1b[0m ${s}`;
+                const err  = (s) => `\x1b[31m✖\x1b[0m ${s}`;
+                const dim  = (s) => `  \x1b[2m${s}\x1b[0m`;
+
+                console.log(`\n  packrai diff  ${path.basename(fromPath)} → ${path.basename(toPath)}\n`);
+
+                const { summary } = diff;
+                if (summary.added   > 0) console.log(warn(`${summary.added} component(s) added`));
+                if (summary.removed > 0) console.log(warn(`${summary.removed} component(s) removed`));
+                if (summary.updated > 0) console.log(warn(`${summary.updated} component(s) updated`));
+                if (summary.added + summary.removed + summary.updated === 0) {
+                    console.log(ok('No component changes'));
+                }
+
+                if (summary.newVulnerabilities > 0) {
+                    console.log(err(`${summary.newVulnerabilities} new vulnerability/vulnerabilities introduced`));
+                    for (const v of diff.newVulnerabilities) {
+                        console.log(dim(`  ${v.osv_id}  ${v.purl}  ${v.severity ?? ''}`));
+                    }
+                }
+                if (summary.resolvedVulnerabilities > 0) {
+                    console.log(ok(`${summary.resolvedVulnerabilities} vulnerability/vulnerabilities resolved`));
+                }
+                if (summary.newVulnerabilities === 0 && summary.resolvedVulnerabilities === 0) {
+                    console.log(ok('No vulnerability changes'));
+                }
+
+                if (diff.updated.length) {
+                    console.log('');
+                    for (const u of diff.updated) {
+                        console.log(dim(`  ${u.name}  ${u.from} → ${u.to}`));
+                    }
+                }
+
+                console.log('');
+                if (summary.newVulnerabilities > 0) process.exit(1);
+
+            } catch (e) {
+                console.error(`\n  \x1b[31mError:\x1b[0m ${e.message}\n`);
+                process.exit(2);
+            }
+        })
+);
+
+// ── scan (default) command ────────────────────────────────────────────────────
 program
     .name('packrai')
     .description('Generate accurate SBOMs from any GitHub repo or local directory')
@@ -43,6 +110,7 @@ program
     .option('--no-licenses',        'Skip deps.dev license enrichment')
     .option('--no-recursive',       'Do not recurse into subdirectories')
     .option('--format <fmt>',       'Output format: both|cyclonedx|spdx',      'both')
+    .option('--license-check',      'Flag forbidden/restricted licenses; exit 1 if any found')
     .option('--json',               'Print summary as JSON (machine-readable)')
     .action(async (source, opts) => {
         let scanDir   = null;
@@ -52,9 +120,7 @@ program
         let commitSha = null;
 
         try {
-            // ── Resolve source: GitHub URL/shorthand or local path ──────────
-            // Local check comes FIRST — a path like "tests/fixtures" must not
-            // be misidentified as an owner/repo GitHub shorthand.
+            // Local check comes FIRST — "tests/fixtures" must not be mistaken for owner/repo.
             const isLocal = source.startsWith('.')
                 || source.startsWith('/')
                 || path.isAbsolute(source)
@@ -64,15 +130,12 @@ program
                 const target = parseGitHubTarget(source);
                 const token  = opts.token || process.env.GITHUB_TOKEN;
 
-                if (!opts.json) {
-                    process.stdout.write(`\n  packrai v${pkg.version}\n`);
-                }
+                if (!opts.json) process.stdout.write(`\n  packrai v${pkg.version}\n`);
 
                 const cloned = cloneRepo(target, { token, quiet: opts.json });
                 scanDir   = cloned.dir;
                 cleanup   = cloned.cleanup;
                 commitSha = cloned.commitSha;
-
                 repoName  = repoName || target.repo;
                 repoVer   = repoVer  || target.ref || commitSha?.slice(0, 7) || 'unknown';
 
@@ -90,7 +153,6 @@ program
                 }
             }
 
-            // ── Run pipeline ─────────────────────────────────────────────────
             const result = await generateFromDirectory(scanDir, {
                 name:      repoName,
                 version:   repoVer,
@@ -105,7 +167,6 @@ program
             const outDir = path.resolve(opts.out);
             fs.mkdirSync(outDir, { recursive: true });
 
-            // ── Write output files ────────────────────────────────────────────
             const written = {};
             if (opts.format !== 'spdx') {
                 written.cyclonedx = path.join(outDir, 'bom.cyclonedx.json');
@@ -116,13 +177,12 @@ program
                 fs.writeFileSync(written.spdx, JSON.stringify(result.spdx, null, 2));
             }
 
-            // ── Output ────────────────────────────────────────────────────────
             if (opts.json) {
                 console.log(JSON.stringify({ ...stats, commitSha, outputs: written }, null, 2));
             } else {
                 const ok   = (s) => `\x1b[32m✓\x1b[0m ${s}`;
                 const warn = (s) => `\x1b[33m⚠\x1b[0m ${s}`;
-                const info = (s) => `  \x1b[2m${s}\x1b[0m`;
+                const dim  = (s) => `  \x1b[2m${s}\x1b[0m`;
 
                 console.log(ok(`${stats.totalComponents} components  ·  ${stats.ecosystems.join(', ')}`));
                 if (written.cyclonedx) console.log(ok(`CycloneDX 1.6  →  ${written.cyclonedx}`));
@@ -137,10 +197,37 @@ program
                 }
 
                 console.log(ok(`Quality score  ${stats.qualityScore}/100`));
-                console.log(info(`${stats.lockFilesScanned.length} lock file(s) · ${stats.elapsedMs}ms`));
+                console.log(dim(`${stats.lockFilesScanned.length} lock file(s) · ${stats.elapsedMs}ms`));
+
+                // ── License compliance ────────────────────────────────────────
+                if (opts.licenseCheck) {
+                    const lc = stats.licenseCompliance;
+                    console.log('');
+                    if (lc.forbidden.length === 0 && lc.restricted.length === 0) {
+                        console.log(ok(`License score ${lc.score}/100  ·  no forbidden or restricted licenses`));
+                    } else {
+                        if (lc.forbidden.length > 0) {
+                            console.log(warn(`${lc.forbidden.length} forbidden license(s)  (strong copyleft)`));
+                            for (const c of lc.forbidden) {
+                                console.log(dim(`  ${c.license}  ${c.name}@${c.version}`));
+                            }
+                        }
+                        if (lc.restricted.length > 0) {
+                            console.log(warn(`${lc.restricted.length} restricted license(s)  (weak copyleft — review required)`));
+                            for (const c of lc.restricted) {
+                                console.log(dim(`  ${c.license}  ${c.name}@${c.version}`));
+                            }
+                        }
+                        console.log(dim(`License score ${lc.score}/100`));
+                    }
+                }
+
                 console.log('');
 
-                if (stats.critical > 0) process.exit(1);
+                let exitCode = 0;
+                if (stats.critical > 0) exitCode = 1;
+                if (opts.licenseCheck && stats.licenseCompliance.forbidden.length > 0) exitCode = 1;
+                if (exitCode) process.exit(exitCode);
             }
 
         } catch (err) {
@@ -149,7 +236,7 @@ program
             } else {
                 console.error(JSON.stringify({ error: err.message }));
             }
-            process.exit(2);  // exit 2 = fatal error (distinct from exit 1 = critical vulns)
+            process.exit(2);
         } finally {
             if (cleanup) cleanup();
         }

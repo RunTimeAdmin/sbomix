@@ -15,6 +15,7 @@ const { enrichWithOSV } = require('./osv');
 const { enrichWithLicenses } = require('./licenses');
 const { generateCycloneDX, validateCycloneDX } = require('./generators/cyclonedx');
 const { generateSPDX } = require('./generators/spdx');
+const { assessLicenses } = require('./licensePolicy');
 
 /**
  * Generate SBOMs from a local directory.
@@ -78,6 +79,7 @@ async function generateFromDirectory(dir, opts = {}) {
 
     const elapsedMs = Date.now() - startMs;
     const { vulnCount, criticalCount } = countVulns(allComponents);
+    const licenseCompliance = assessLicenses(allComponents);
 
     return {
         cyclonedx,
@@ -90,6 +92,7 @@ async function generateFromDirectory(dir, opts = {}) {
             vulnerabilities: vulnCount,
             critical: criticalCount,
             qualityScore: computeQualityScore(allComponents, lockFiles),
+            licenseCompliance,
             elapsedMs,
         },
     };

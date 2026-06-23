@@ -10,6 +10,7 @@ const path      = require('path');
 const db        = require('./db');
 const { validateCycloneDX } = require('../generators/cyclonedx');
 const { enrichWithOSV }     = require('../osv');
+const { diffComponents, diffVulns } = require('../diff');
 
 // ── Startup guard ─────────────────────────────────────────────────────────────
 if (!process.env.HMAC_SECRET) {
@@ -490,13 +491,18 @@ app.get('/api/v1/search', requireScope('sbom:read'), async (req, res) => {
                c.purl,
                c.name              AS component,
                c.version           AS component_version,
-               v.osv_id, v.cve_id, v.severity, v.cvss_score, v.fixed_version, v.title
+               v.osv_id, v.cve_id, v.severity, v.cvss_score, v.fixed_version, v.title,
+               vx.status           AS vex_status,
+               vx.justification    AS vex_justification
              FROM vulnerabilities v
              JOIN components c          ON c.id = v.component_id
              JOIN sbom_components sc    ON sc.component_id = c.id
              JOIN app_latest_sboms ls   ON ls.sbom_id = sc.sbom_id
              JOIN sboms s               ON s.id = ls.sbom_id
              JOIN applications a        ON a.id = ls.app_id
+             LEFT JOIN vex_statements vx ON vx.component_id = c.id
+                                        AND vx.osv_id = v.osv_id
+                                        AND vx.org_id = v.org_id
              WHERE v.org_id = $1 AND (v.cve_id = $2 OR v.osv_id = $2)
              ORDER BY v.cvss_score DESC NULLS LAST, a.name`,
             [req.org.id, id]
@@ -521,6 +527,13 @@ app.get('/api/v1/report', requireScope('sbom:read'), async (req, res) => {
                  JOIN app_latest_sboms ls   ON ls.sbom_id = sc.sbom_id
                  JOIN applications a        ON a.id = ls.app_id
                  WHERE v.org_id = $1 AND v.severity IN ('CRITICAL','HIGH')
+                   AND NOT EXISTS (
+                     SELECT 1 FROM vex_statements vx
+                     WHERE vx.component_id = v.component_id
+                       AND vx.osv_id = v.osv_id
+                       AND vx.org_id = v.org_id
+                       AND vx.status = 'not_affected'
+                   )
                  GROUP BY v.cve_id, v.osv_id, v.severity, v.cvss_score, v.title
                  ORDER BY v.cvss_score DESC NULLS LAST, apps_affected DESC
                  LIMIT 10`,
@@ -560,6 +573,192 @@ app.get('/api/v1/report', requireScope('sbom:read'), async (req, res) => {
         });
     } catch (err) {
         console.error('[report]', err.message);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ── SBOM diff ─────────────────────────────────────────────────────────────────
+// GET /api/v1/apps/:name/diff
+// Compare the two most-recent SBOMs for an app.
+// Optional ?from=<sbom_id>&to=<sbom_id> to compare specific pairs.
+app.get('/api/v1/apps/:name/diff', requireScope('sbom:read'), async (req, res) => {
+    try {
+        // Resolve app
+        const appRes = await db.query(
+            `SELECT id FROM applications WHERE org_id = $1 AND name = $2`,
+            [req.org.id, req.params.name]
+        );
+        if (!appRes.rows.length) return res.status(404).json({ error: 'App not found' });
+        const appId = appRes.rows[0].id;
+
+        // Resolve the two SBOM IDs
+        let fromId = req.query.from;
+        let toId   = req.query.to;
+
+        if (!fromId || !toId) {
+            const recent = await db.query(
+                `SELECT id, version, created_at
+                 FROM sboms WHERE app_id = $1 ORDER BY created_at DESC LIMIT 2`,
+                [appId]
+            );
+            if (recent.rows.length < 2) {
+                return res.status(409).json({ error: 'Need at least two SBOMs to diff' });
+            }
+            toId   = toId   || recent.rows[0].id;
+            fromId = fromId || recent.rows[1].id;
+        }
+
+        // Fetch component lists for each SBOM
+        const compQuery = `
+            SELECT c.purl, c.name, c.version, c.ecosystem
+            FROM sbom_components sc
+            JOIN components c ON c.id = sc.component_id
+            WHERE sc.sbom_id = $1`;
+
+        const vulnQuery = `
+            SELECT v.osv_id, v.cve_id, v.severity, c.purl AS component_purl, c.name AS component_name
+            FROM vulnerabilities v
+            JOIN components c       ON c.id = v.component_id
+            JOIN sbom_components sc ON sc.component_id = c.id
+            WHERE sc.sbom_id = $1 AND v.org_id = $2`;
+
+        const [fromComps, toComps, fromVulns, toVulns, fromMeta, toMeta] = await Promise.all([
+            db.query(compQuery, [fromId]),
+            db.query(compQuery, [toId]),
+            db.query(vulnQuery, [fromId, req.org.id]),
+            db.query(vulnQuery, [toId,   req.org.id]),
+            db.query(`SELECT id, version, created_at FROM sboms WHERE id = $1`, [fromId]),
+            db.query(`SELECT id, version, created_at FROM sboms WHERE id = $1`, [toId]),
+        ]);
+
+        const compDiff = diffComponents(fromComps.rows, toComps.rows);
+        const vulnDiff = diffVulns(fromVulns.rows, toVulns.rows);
+
+        res.json({
+            from:    fromMeta.rows[0],
+            to:      toMeta.rows[0],
+            summary: {
+                ...compDiff.summary,
+                newVulnerabilities:      vulnDiff.introduced.length,
+                resolvedVulnerabilities: vulnDiff.resolved.length,
+            },
+            added:                   compDiff.added,
+            removed:                 compDiff.removed,
+            updated:                 compDiff.updated,
+            newVulnerabilities:      vulnDiff.introduced,
+            resolvedVulnerabilities: vulnDiff.resolved,
+        });
+    } catch (err) {
+        console.error('[diff]', err.message);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ── VEX statements ────────────────────────────────────────────────────────────
+const VEX_STATUSES      = new Set(['not_affected', 'affected', 'fixed', 'under_investigation']);
+const VEX_JUSTIFICATIONS = new Set([
+    'component_not_present', 'vulnerable_code_not_present',
+    'vulnerable_code_not_in_execute_path',
+    'vulnerable_code_cannot_be_controlled_by_adversary',
+    'inline_mitigations_already_exist',
+]);
+
+// POST /api/v1/vex  — create or update a VEX statement
+app.post('/api/v1/vex', requireScope('sbom:ingest'), async (req, res) => {
+    const { component_id, osv_id, status, justification, impact_statement } = req.body;
+
+    if (!component_id || typeof component_id !== 'string') {
+        return res.status(400).json({ error: 'component_id must be a UUID string' });
+    }
+    if (!osv_id || typeof osv_id !== 'string') {
+        return res.status(400).json({ error: 'osv_id must be a non-empty string' });
+    }
+    if (!VEX_STATUSES.has(status)) {
+        return res.status(400).json({ error: 'status must be one of: ' + [...VEX_STATUSES].join(', ') });
+    }
+    if (status === 'not_affected' && !justification) {
+        return res.status(400).json({ error: 'justification is required when status is not_affected' });
+    }
+    if (justification && !VEX_JUSTIFICATIONS.has(justification)) {
+        return res.status(400).json({ error: 'invalid justification value' });
+    }
+    if (impact_statement !== undefined && typeof impact_statement !== 'string') {
+        return res.status(400).json({ error: 'impact_statement must be a string' });
+    }
+
+    try {
+        // Verify the component belongs to this org
+        const compCheck = await db.query(
+            `SELECT id FROM components WHERE id = $1 AND org_id = $2`,
+            [component_id, req.org.id]
+        );
+        if (!compCheck.rows.length) {
+            return res.status(404).json({ error: 'Component not found' });
+        }
+
+        const { rows } = await db.query(
+            `INSERT INTO vex_statements
+               (org_id, component_id, osv_id, status, justification, impact_statement, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,NOW())
+             ON CONFLICT (org_id, component_id, osv_id) DO UPDATE
+               SET status           = EXCLUDED.status,
+                   justification    = EXCLUDED.justification,
+                   impact_statement = EXCLUDED.impact_statement,
+                   updated_at       = NOW()
+             RETURNING *`,
+            [req.org.id, component_id, osv_id, status,
+             justification || null, impact_statement || null]
+        );
+        res.status(201).json(rows[0]);
+    } catch (err) {
+        console.error('[vex:post]', err.message);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// GET /api/v1/vex  — list VEX statements for the org
+app.get('/api/v1/vex', requireScope('sbom:read'), async (req, res) => {
+    const { osv_id, component_id } = req.query;
+    try {
+        const conditions = ['vx.org_id = $1'];
+        const params     = [req.org.id];
+        if (osv_id) {
+            params.push(osv_id);
+            conditions.push(`vx.osv_id = $${params.length}`);
+        }
+        if (component_id) {
+            params.push(component_id);
+            conditions.push(`vx.component_id = $${params.length}`);
+        }
+
+        const { rows } = await db.query(
+            `SELECT vx.id, vx.component_id, c.purl, c.name AS component_name, c.version,
+                    vx.osv_id, vx.status, vx.justification, vx.impact_statement,
+                    vx.created_at, vx.updated_at
+             FROM vex_statements vx
+             JOIN components c ON c.id = vx.component_id
+             WHERE ${conditions.join(' AND ')}
+             ORDER BY vx.updated_at DESC`,
+            params
+        );
+        res.json({ statements: rows });
+    } catch (err) {
+        console.error('[vex:get]', err.message);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// DELETE /api/v1/vex/:id  — revoke a VEX statement
+app.delete('/api/v1/vex/:id', requireScope('sbom:ingest'), async (req, res) => {
+    try {
+        const { rowCount } = await db.query(
+            `DELETE FROM vex_statements WHERE id = $1 AND org_id = $2`,
+            [req.params.id, req.org.id]
+        );
+        if (!rowCount) return res.status(404).json({ error: 'VEX statement not found' });
+        res.status(204).end();
+    } catch (err) {
+        console.error('[vex:delete]', err.message);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
