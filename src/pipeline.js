@@ -113,8 +113,9 @@ function computeQualityScore(components, lockFiles) {
 
     const withPurl    = components.filter((c) => c.purl && !c.purl.includes('NOASSERTION')).length;
     const withHash    = components.filter((c) => c.hashes && c.hashes.length > 0).length;
+    const NOASSERT = new Set(['NOASSERTION', 'UNKNOWN', null, undefined, '']);
     const withLicense = components.filter((c) =>
-        c.license && c.license !== 'NOASSERTION' && c.license !== 'UNKNOWN').length;
+        c.licenses?.length > 0 && !NOASSERT.has(c.licenses[0])).length;
 
     const weakCount = lockFiles.filter((lf) => lf.type === 'requirements-txt').length;
     const strongFraction = lockFiles.length > 0

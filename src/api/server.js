@@ -68,8 +68,10 @@ app.post('/api/v1/ingest', requireAuth, async (req, res) => {
             );
             const sbomId = sbomRes.rows[0].id;
 
-            // Normalise + upsert each component from the CycloneDX BOM
-            const components = cyclonedx.components || [];
+            // Normalise + upsert each component; build purl→id map for vuln linking
+            const components  = cyclonedx.components || [];
+            const purlToCompId = new Map();
+
             for (const comp of components) {
                 if (!comp.purl) continue;
 
@@ -88,33 +90,43 @@ app.post('/api/v1/ingest', requireAuth, async (req, res) => {
                      comp.purl.split(':')[1]?.split('/')[0] ?? 'unknown', license]
                 );
                 const compId = compRes.rows[0].id;
+                purlToCompId.set(comp.purl, compId);
 
-                // Link component to this SBOM
-                const isDirectDep = cyclonedx.dependencies
-                    ?.find(d => d.ref === comp.bom_ref)
-                    ?.dependsOn?.length > 0;
+                // Link component to this SBOM (bom-ref === purl in our generator)
+                const isDirectDep = (cyclonedx.dependencies
+                    ?.find(d => d.ref === comp.purl)
+                    ?.dependsOn?.length ?? 0) > 0;
                 await client.query(
                     `INSERT INTO sbom_components (sbom_id, component_id, scope, is_direct)
                      VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
-                    [sbomId, compId, comp.scope ?? 'required', isDirectDep ?? false]
+                    [sbomId, compId, comp.scope ?? 'required', isDirectDep]
                 );
+            }
 
-                // Store any vulnerability data already present in the BOM
-                const vulns = comp.vulnerabilities || [];
-                for (const v of vulns) {
-                    const osvId = v.id;
-                    const cveId = v.aliases?.find(a => a.startsWith('CVE-')) ?? null;
+            // Ingest top-level vulnerabilities (CycloneDX 1.6 spec)
+            for (const v of (cyclonedx.vulnerabilities || [])) {
+                const osvId  = v.id;
+                const cveId  = v.advisories?.find(a => a.title?.startsWith('CVE-'))?.title
+                            || (osvId?.startsWith('CVE-') ? osvId : null);
+                const rating = v.ratings?.[0];
+
+                for (const affected of (v.affects || [])) {
+                    const compId = purlToCompId.get(affected.ref);
+                    if (!compId) continue;
+
                     await client.query(
                         `INSERT INTO vulnerabilities
                            (component_id, org_id, osv_id, cve_id, severity, cvss_score, fixed_version, title)
                          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
                          ON CONFLICT (component_id, osv_id) DO UPDATE
-                           SET severity = EXCLUDED.severity,
-                               cvss_score = EXCLUDED.cvss_score,
-                               fixed_version = EXCLUDED.fixed_version,
+                           SET severity    = EXCLUDED.severity,
+                               cvss_score  = EXCLUDED.cvss_score,
                                last_checked = NOW()`,
                         [compId, req.org.id, osvId, cveId,
-                         v.severity, v.cvssScore ?? null, v.fixedVersion ?? null, v.title ?? null]
+                         rating?.severity?.toUpperCase() ?? null,
+                         rating?.score ?? null,
+                         null,
+                         v.description || null]
                     );
                 }
             }

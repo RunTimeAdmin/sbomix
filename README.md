@@ -199,12 +199,16 @@ PackrAI includes an API server for org-wide SBOM management — the layer that a
 
 ### Start the API
 
+**With Docker (recommended):**
 ```bash
-# Copy env template
-cp .env.example .env
-# Edit DATABASE_URL and ADMIN_KEY
+cp .env.example .env      # set ADMIN_KEY and POSTGRES_PASSWORD
+docker compose up -d
+```
+API is available at `http://localhost:3080`. Postgres data is persisted in a named volume.
 
-# Start (requires Postgres)
+**Without Docker (requires Postgres):**
+```bash
+cp .env.example .env      # set DATABASE_URL and ADMIN_KEY
 npm run serve
 ```
 
@@ -236,15 +240,21 @@ git clone https://github.com/RunTimeAdmin/PACKRAI
 cd PACKRAI
 npm install
 
-# Run tests
+# Unit tests (no external dependencies)
 npm test
+
+# End-to-end integration test (requires docker compose up -d first)
+npm run e2e
+
+# Benchmark PackrAI vs Syft vs Trivy
+npm run bench
 
 # Run the CLI locally
 node bin/packrai.js owner/repo --no-vulns
 
-# Start the API server
-cp .env.example .env   # edit DATABASE_URL
-npm run serve
+# Start the API + Postgres
+cp .env.example .env   # edit ADMIN_KEY and POSTGRES_PASSWORD
+docker compose up -d
 ```
 
 ### Project Structure

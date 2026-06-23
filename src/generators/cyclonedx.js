@@ -40,6 +40,9 @@ function generateCycloneDX(components, meta = {}) {
         dependencies: buildDependencies(deduped),
     };
 
+    const vulns = buildVulnerabilities(deduped);
+    if (vulns.length > 0) bom.vulnerabilities = vulns;
+
     return bom;
 }
 
@@ -93,11 +96,6 @@ function cdxComponent(comp) {
         c.scope = comp.scope === 'dev' ? 'excluded' : 'optional';
     }
 
-    // Vulnerability data added by OSV enricher
-    if (comp.vulnerabilities && comp.vulnerabilities.length > 0) {
-        c._vulnerabilities = comp.vulnerabilities; // moved to top-level vulnerabilities section
-    }
-
     return c;
 }
 
@@ -108,6 +106,48 @@ function buildDependencies(components) {
         ref: comp.purl,
         dependsOn: comp.dependsOn || [],
     }));
+}
+
+/**
+ * Build CycloneDX 1.6 top-level vulnerabilities array from in-memory components.
+ * Each (vuln-id, affected-purl) pair becomes one entry.
+ */
+function buildVulnerabilities(components) {
+    const seen  = new Set();
+    const vulns = [];
+
+    for (const comp of components) {
+        for (const v of (comp.vulnerabilities || [])) {
+            const key = `${v.id}::${comp.purl}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+
+            const cveAlias = v.aliases?.find((a) => a.startsWith('CVE-')) || null;
+            const entry    = {
+                'bom-ref': `vuln-${v.id}`,
+                id:         v.id,
+                source:     { name: 'OSV', url: v.url },
+                affects:    [{ ref: comp.purl }],
+                description: v.summary || '',
+            };
+
+            if (v.cvss) {
+                entry.ratings = [{
+                    score:    parseFloat(v.cvss) || null,
+                    severity: (v.severity || 'unknown').toLowerCase(),
+                    method:   'CVSSv3',
+                }];
+            }
+
+            if (cveAlias) {
+                entry.advisories = [{ url: `https://nvd.nist.gov/vuln/detail/${cveAlias}`, title: cveAlias }];
+            }
+
+            vulns.push(entry);
+        }
+    }
+
+    return vulns;
 }
 
 function deduplicateComponents(components) {

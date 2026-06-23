@@ -32,8 +32,9 @@ const UNKNOWN = new Set([null, undefined, 'NOASSERTION', 'UNKNOWN', '']);
 async function enrichWithLicenses(components, opts = {}) {
     const timeout = opts.timeout ?? TIMEOUT_MS;
 
-    // Only target components that need enrichment
-    const targets = components.filter((c) => UNKNOWN.has(c.license));
+    // Only target components that need enrichment (no licenses or only NOASSERTION)
+    const targets = components.filter((c) =>
+        !c.licenses?.length || UNKNOWN.has(c.licenses[0]));
     if (targets.length === 0) return;
 
     // Deduplicate by (ecosystem, name, version) — update all matching components
@@ -55,7 +56,7 @@ async function enrichWithLicenses(components, opts = {}) {
             try {
                 const license = await fetchLicense(system, name, version, timeout);
                 if (license) {
-                    for (const c of comps) c.license = license;
+                    for (const c of comps) c.licenses = [license];
                 }
             } catch {
                 // Network failure — leave license as NOASSERTION, don't crash
