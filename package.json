@@ -4,7 +4,7 @@
   "description": "Fast, accurate SBOM generation from GitHub repos and local lock files",
   "main": "src/pipeline.js",
   "bin": {
-    "packrai": "./bin/packrai.js"
+    "packrai": "bin/packrai.js"
   },
   "type": "commonjs",
   "scripts": {
