@@ -1,5 +1,6 @@
-# Stray files
+# Test output / stray SBOM files
 *.txt
+bom.*.json
 
 # Development / CI — not needed by npm consumers
 .env
@@ -11,6 +12,15 @@ Dockerfile
 scripts/
 tests/
 PACKRAI_review.md
+
+# Server-side files (not part of the CLI package)
+src/api/server.js
+src/api/db.js
+src/api/schema.sql
+src/api/dashboard.html
+
+# Deployment scripts
+deploy/
 
 # OS / editor
 .DS_Store
