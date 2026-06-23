@@ -1,0 +1,327 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "test-app-1.0.0",
+  "documentNamespace": "https://packrai.xyz/sbom/test-app-1.0.0-c3f18267",
+  "creationInfo": {
+    "created": "2026-06-23T13:59:45.380Z",
+    "creators": [
+      "Tool: packrai-0.1.0"
+    ],
+    "licenseListVersion": "3.22"
+  },
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-pkg-npm-express-4.18.2",
+      "name": "express",
+      "versionInfo": "4.18.2",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/express@4.18.2"
+        }
+      ],
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "5/PsL6iGOs/rkeYHSs+B3y7a6t67LmqQiX19n/ioeC9px1MV/KdM71L/M3n9/tqVKe3Zs6Td8c9cEvO3Xr5aQ=="
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-pkg-npm-accepts-1.3.8",
+      "name": "accepts",
+      "versionInfo": "1.3.8",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/accepts@1.3.8"
+        }
+      ],
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "PYAthTa2m2VKxuvSD3DPC/Gy+U+sOA1LAuT8mkmRuvw+NACSaeXEQ+NHcVF7rONl6qcaxV3Uuemwawk+7+SJLw=="
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-pkg-npm-mime-types-2.1.35",
+      "name": "mime-types",
+      "versionInfo": "2.1.35",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/mime-types@2.1.35"
+        }
+      ],
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "ZDY+bPm5zTTF+YpCrAU9nK0UQ425tVTopQGMhZhyR5j+TzDqrNnv9XnLKnPHWr0YpVBJg0JStC18nN0NIaYyQ=="
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-pkg-npm-body-parser-1.20.1",
+      "name": "body-parser",
+      "versionInfo": "1.20.1",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/body-parser@1.20.1"
+        }
+      ],
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "jWi7abTbYwajOytWCQc37VulmWiRae5RyTpaCyDcS5/lMdtwSz5lOpDE67srw/HYe35f1z3fDQw+3txg7gNtWw=="
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-pkg-npm-jest-29.0.3",
+      "name": "jest",
+      "versionInfo": "29.0.3",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/jest@29.0.3"
+        }
+      ],
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "abc=="
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-pkg-cargo-test-crate-0.1.0",
+      "name": "test-crate",
+      "versionInfo": "0.1.0",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/test-crate@0.1.0"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "SPDXID": "SPDXRef-pkg-cargo-serde-1.0.193",
+      "name": "serde",
+      "versionInfo": "1.0.193",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/serde@1.0.193"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "25dd0975d2f922c678e1efebb5a56f847e9ca57f0cae1cf6b62a3a8730ceb311"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-pkg-cargo-serde-derive-1.0.193",
+      "name": "serde_derive",
+      "versionInfo": "1.0.193",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/serde_derive@1.0.193"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "43576ca501357b9b071ac53cdc7da8ef0cbd9493d8df094cd821777ea6e894d3"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-pkg-cargo-proc-macro2-1.0.70",
+      "name": "proc-macro2",
+      "versionInfo": "1.0.70",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/proc-macro2@1.0.70"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "39278fbbf5fb4f646ce651690877f89d1c5811a3d4acb27700c1cb3cdb78fd3b"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-pkg-cargo-tokio-1.35.1",
+      "name": "tokio",
+      "versionInfo": "1.35.1",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:cargo/tokio@1.35.1"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "c89b4efa943be685f629b149f53829423f8f5531ea21249408e8e2f8671ec9b0"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-pkg-npm-express-4.18.2"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-pkg-npm-accepts-1.3.8"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-pkg-npm-mime-types-2.1.35"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-pkg-npm-body-parser-1.20.1"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-pkg-npm-jest-29.0.3"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-pkg-cargo-test-crate-0.1.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-pkg-cargo-serde-1.0.193"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-pkg-cargo-serde-derive-1.0.193"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-pkg-cargo-proc-macro2-1.0.70"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-pkg-cargo-tokio-1.35.1"
+    },
+    {
+      "spdxElementId": "SPDXRef-pkg-npm-express-4.18.2",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-pkg-npm-accepts-1.3.8"
+    },
+    {
+      "spdxElementId": "SPDXRef-pkg-npm-express-4.18.2",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-pkg-npm-body-parser-1.20.1"
+    },
+    {
+      "spdxElementId": "SPDXRef-pkg-npm-accepts-1.3.8",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-pkg-npm-mime-types-2.1.35"
+    },
+    {
+      "spdxElementId": "SPDXRef-pkg-cargo-test-crate-0.1.0",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-pkg-cargo-serde-1.0.193"
+    },
+    {
+      "spdxElementId": "SPDXRef-pkg-cargo-test-crate-0.1.0",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-pkg-cargo-tokio-1.35.1"
+    },
+    {
+      "spdxElementId": "SPDXRef-pkg-cargo-serde-1.0.193",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-pkg-cargo-serde-derive-1.0.193"
+    },
+    {
+      "spdxElementId": "SPDXRef-pkg-cargo-serde-derive-1.0.193",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-pkg-cargo-proc-macro2-1.0.70"
+    }
+  ]
+}
