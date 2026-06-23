@@ -101,6 +101,7 @@ runs:
 
     - name: Push to PackrAI API
       if: inputs.api-url != '' && inputs.api-key != ''
+      continue-on-error: true
       shell: bash
       env:
         PACKRAI_API_URL: ${{ inputs.api-url }}
