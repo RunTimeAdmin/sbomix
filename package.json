@@ -1,6 +1,6 @@
 {
   "name": "packrai",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Fast, accurate SBOM generation from GitHub repos and local lock files",
   "main": "src/pipeline.js",
   "bin": {
