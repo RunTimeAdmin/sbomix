@@ -19,10 +19,13 @@ services:
     ports:
       - "${PORT:-3080}:3080"
     environment:
-      DATABASE_URL: postgres://packrai:${POSTGRES_PASSWORD:-changeme}@db:5432/packrai
-      ADMIN_KEY:    ${ADMIN_KEY:?ADMIN_KEY must be set in .env}
-      HMAC_SECRET:  ${HMAC_SECRET:?HMAC_SECRET must be set in .env}
-      PORT:         3080
+      DATABASE_URL:      postgres://packrai:${POSTGRES_PASSWORD:-changeme}@db:5432/packrai
+      ADMIN_KEY:         ${ADMIN_KEY:?ADMIN_KEY must be set in .env}
+      HMAC_SECRET:       ${HMAC_SECRET:?HMAC_SECRET must be set in .env}
+      PORT:              3080
+      DEEPSEEK_API_KEY:  ${DEEPSEEK_API_KEY:-}
+      CORS_ORIGIN:       ${CORS_ORIGIN:-}
+      ENABLE_ADMIN_API:  ${ENABLE_ADMIN_API:-}
     depends_on:
       db:
         condition: service_healthy
