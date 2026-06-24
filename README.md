@@ -44,6 +44,12 @@ npx packrai . --license-check
 
 # Skip vulnerability lookup (faster, offline-safe)
 npx packrai owner/repo --no-vulns
+
+# AI remediation advice — explains vulns and produces a prioritised fix plan
+DEEPSEEK_API_KEY=sk-... npx packrai . --explain
+
+# AI explain with CISA KEV context — flags actively-exploited vulns
+DEEPSEEK_API_KEY=sk-... KATZILLA_API_KEY=kz_... npx packrai . --explain
 ```
 
 Output files written to the current directory:
@@ -70,6 +76,8 @@ flowchart LR
         D[Detect] --> E[Parse dep graph]
         E --> F[Enrich: licenses\ndeps.dev API]
         E --> G[Enrich: vulns\nOSV batch API]
+        G --> N[CISA KEV flag\nkatzilla.dev]
+        G --> O[AI explain\nDeepSeek-V3]
     end
 
     subgraph output["Output"]
@@ -110,6 +118,8 @@ Lock files are the resolved dependency graph — authoritative, deterministic, a
 | **License policy** | ✅ | ❌ | ❌ |
 | **VEX support** | ✅ | ❌ | ❌ |
 | **Central repo** | ✅ | ❌ | ❌ |
+| **CISA KEV flag** | ✅ | ❌ | ❌ |
+| **AI remediation** | ✅ | ❌ | ❌ |
 
 ### Benchmark Results
 
@@ -145,6 +155,23 @@ Shows exactly what changed between two releases: components added/removed/update
 
 ### VEX Support
 Mark vulnerabilities as `not_affected`, `fixed`, `affected`, or `under_investigation` via the API. `not_affected` statements suppress vulns from risk reports, keeping dashboards signal-rich.
+
+### CISA KEV Enrichment
+Every vulnerability is automatically cross-referenced against the [CISA Known Exploited Vulnerabilities catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) (1,600+ entries, refreshed daily). Vulns on the KEV list are flagged `kev: true` in the database and surfaced in the AI explain output as highest priority — because being actively exploited in the wild is categorically different from a theoretical CVSS score.
+
+Requires `KATZILLA_API_KEY` ([katzilla.dev](https://katzilla.dev)). The catalog is fetched once at API startup then refreshed every 24 hours. New vulns are cross-referenced immediately at ingest time without waiting for the refresh cycle.
+
+### AI Remediation Advice
+```bash
+DEEPSEEK_API_KEY=sk-... npx packrai . --explain
+```
+After scanning, sends your vulnerability list to [DeepSeek-V3](https://platform.deepseek.com) and returns:
+- 2–3 sentence plain-English risk summary
+- Prioritised upgrade plan ordered by impact (most vulns resolved per change first)
+- Specific mitigation guidance for vulns with no fix available
+- CISA KEV callouts for actively-exploited entries
+
+Available both as a CLI flag (`--explain`) and as a REST endpoint (`POST /api/v1/apps/:name/explain`). Requires `DEEPSEEK_API_KEY`. The API endpoint returns `501` if the key is not configured, so it degrades gracefully.
 
 ### Quality Score
 Every SBOM gets a completeness score (0–100) measuring alignment with CISA 2025 minimum elements: purl coverage, hash coverage, license coverage, and lock-file fidelity.
@@ -267,6 +294,7 @@ Scan options:
   --token <token>       GitHub token for private repos (or set $GITHUB_TOKEN)
   --format <fmt>        both | cyclonedx | spdx  (default: both)
   --license-check       Flag forbidden/restricted licenses; exit 1 if any found
+  --explain             AI remediation advice via DeepSeek-V3 (requires DEEPSEEK_API_KEY)
   --no-vulns            Skip OSV vulnerability enrichment
   --no-licenses         Skip deps.dev license enrichment
   --no-recursive        Do not recurse into subdirectories
@@ -354,15 +382,17 @@ flowchart TD
         D[Report endpoint]
         E[VEX endpoint]
         F[Diff endpoint]
+        P[Explain endpoint\nDeepSeek-V3]
     end
 
     subgraph db["PostgreSQL"]
         G[(organizations)]
         H[(sboms)]
         I[(components)]
-        J[(vulnerabilities)]
+        J[(vulnerabilities\n+ kev flag)]
         K[(vex_statements)]
         L[(app_latest_sboms)]
+        M[(kev_catalog\nCISA KEV)]
     end
 
     B --> G & H & I & J & L
@@ -370,6 +400,7 @@ flowchart TD
     D --> L & J & K
     E --> K
     F --> H
+    P --> J & M
 ```
 
 ### Start the API
@@ -391,6 +422,7 @@ API available at `http://localhost:3080`.
 | `GET` | `/api/v1/apps/:name/diff` | Diff latest two SBOMs for an app |
 | `GET` | `/api/v1/search?cve=CVE-...` | Which apps are exposed to this CVE? |
 | `GET` | `/api/v1/report` | Org-wide risk report |
+| `POST` | `/api/v1/apps/:name/explain` | AI vulnerability summary + remediation plan |
 | `POST` | `/api/v1/vex` | Add a VEX statement |
 | `GET` | `/api/v1/vex` | List VEX statements |
 | `POST` | `/api/v1/keys` | Issue a scoped API key |
@@ -424,6 +456,8 @@ packrai/
 │   ├── component.js        Shared component model + purl generation
 │   ├── github.js           GitHub URL parsing + shallow clone
 │   ├── osv.js              OSV vulnerability enrichment (batch API)
+│   ├── kev.js              CISA KEV catalog sync (katzilla.dev, daily refresh)
+│   ├── explain.js          AI remediation advice (DeepSeek-V3 via OpenAI SDK)
 │   ├── licenses.js         License enrichment (deps.dev API)
 │   ├── parsers/
 │   │   ├── npm.js          package-lock.json v1/v2/v3, yarn.lock

@@ -75,6 +75,15 @@
   .badge-yellow { background: rgba(210,153,34,0.15); color: var(--yellow); }
   .badge-green  { background: rgba(63,185,80,0.15);  color: var(--accent); }
   .badge-muted  { background: rgba(139,148,158,0.15); color: var(--muted); }
+  .badge-kev    { background: rgba(248,81,73,0.2); color: #ff6b6b; border: 1px solid rgba(248,81,73,0.4); font-size: 10px; letter-spacing: .04em; }
+
+  /* Explain panel */
+  .explain-btn { background: none; border: 1px solid var(--border); color: var(--muted); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; white-space: nowrap; }
+  .explain-btn:hover { border-color: var(--blue); color: var(--blue); }
+  .explain-btn:disabled { opacity: .4; cursor: default; }
+  .explain-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px 24px; margin-top: 12px; display: none; }
+  .explain-panel.open { display: block; }
+  .explain-panel pre { white-space: pre-wrap; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; line-height: 1.7; color: var(--text); }
 
   /* Empty / loading states */
   .empty { text-align: center; padding: 48px 24px; color: var(--muted); }
@@ -220,7 +229,7 @@ async function loadDashboard() {
       appsEl.innerHTML = `
         <div class="table-wrap"><table>
           <thead><tr>
-            <th>Application</th><th>Last scanned</th><th>SBOMs</th><th>Critical</th>
+            <th>Application</th><th>Last scanned</th><th>SBOMs</th><th>Critical</th><th></th>
           </tr></thead>
           <tbody>${apps.map(a => `
             <tr>
@@ -230,6 +239,12 @@ async function loadDashboard() {
               <td>${Number(a.critical_count) > 0
                     ? `<span class="badge badge-red">${a.critical_count}</span>`
                     : '<span class="badge badge-green">0</span>'}</td>
+              <td><button class="explain-btn" onclick="runExplain(this,'${esc(a.name)}')">AI Explain</button></td>
+            </tr>
+            <tr class="explain-row-${esc(a.name).replace(/\//g,'__')}" style="display:none">
+              <td colspan="5">
+                <div class="explain-panel open" id="explain-${esc(a.name).replace(/\//g,'__')}"></div>
+              </td>
             </tr>`).join('')}
           </tbody>
         </table></div>`;
@@ -252,7 +267,10 @@ async function loadDashboard() {
           </tr></thead>
           <tbody>${vulns.map(v => `
             <tr>
-              <td class="mono"><a href="https://osv.dev/vulnerability/${esc(v.osv_id)}" target="_blank" style="color:var(--blue);text-decoration:none">${esc(v.cve_id || v.osv_id)}</a></td>
+              <td class="mono">
+                <a href="https://osv.dev/vulnerability/${esc(v.osv_id)}" target="_blank" style="color:var(--blue);text-decoration:none">${esc(v.cve_id || v.osv_id)}</a>
+                ${v.kev ? '<span class="badge badge-kev" title="CISA Known Exploited Vulnerability — actively exploited in the wild">KEV</span>' : ''}
+              </td>
               <td>${sev(v.severity)}</td>
               <td style="color:var(--muted)">${v.cvss_score ?? '—'}</td>
               <td>${v.apps_affected}</td>
@@ -331,6 +349,49 @@ document.getElementById('logout-btn').addEventListener('click', () => {
   localStorage.removeItem('packrai_key');
   location.reload();
 });
+
+// AI Explain
+async function runExplain(btn, appName) {
+  const slug = appName.replace(/\//g, '__');
+  const row  = document.querySelector(`.explain-row-${slug}`);
+  const panel = document.getElementById(`explain-${slug}`);
+  if (!row || !panel) return;
+
+  if (row.style.display !== 'none') {
+    row.style.display = 'none';
+    btn.textContent = 'AI Explain';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Asking AI…';
+  row.style.display = '';
+  panel.innerHTML = '<span class="spinner"></span> Generating remediation advice…';
+
+  try {
+    const r = await fetch(`${API}/api/v1/apps/${encodeURIComponent(appName)}/explain`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      panel.innerHTML = `<span style="color:var(--red)">${esc(data.error || 'Explain failed')}</span>`;
+    } else if (data.explanation === 'No active vulnerabilities found for this app.') {
+      panel.innerHTML = `<span style="color:var(--accent)">✓ No active vulnerabilities — nothing to explain.</span>`;
+    } else {
+      panel.innerHTML = `
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.06em">
+          AI Remediation Advice &nbsp;·&nbsp; ${data.vulnerabilityCount} vuln${data.vulnerabilityCount !== 1 ? 's' : ''} analysed &nbsp;·&nbsp; <span style="color:var(--muted)">DeepSeek-V3</span>
+        </div>
+        <pre>${esc(data.explanation)}</pre>`;
+    }
+    btn.textContent = 'Hide';
+  } catch (e) {
+    panel.innerHTML = `<span style="color:var(--red)">Request failed</span>`;
+    btn.textContent = 'AI Explain';
+  }
+  btn.disabled = false;
+}
 
 // Auto-login from localStorage
 const saved = localStorage.getItem('packrai_key');
