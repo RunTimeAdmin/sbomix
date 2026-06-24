@@ -5,8 +5,9 @@ set -euo pipefail
 
 VPS="root@76.13.101.31"
 SSH_KEY="$HOME/.ssh/id_ed25519"
-SSH="ssh -i $SSH_KEY"
-SCP="scp -i $SSH_KEY"
+JUMP="-J root@76.13.101.39"
+SSH="ssh -i $SSH_KEY $JUMP -o StrictHostKeyChecking=no"
+SCP="scp -i $SSH_KEY -o ProxyJump=root@76.13.101.39 -o StrictHostKeyChecking=no"
 
 echo "==> Uploading files to VPS..."
 $SCP deploy/packrai-nginx.conf  $VPS:/tmp/packrai-nginx.conf

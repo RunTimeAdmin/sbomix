@@ -15,7 +15,7 @@ if ! command -v docker &>/dev/null; then
     systemctl start docker
 fi
 
-if ! docker compose version &>/dev/null; then
+if ! docker compose version &>/dev/null 2>&1; then
     echo "==> Installing Docker Compose plugin..."
     apt-get install -y docker-compose-plugin
 fi
@@ -35,31 +35,28 @@ if [ ! -f "$INSTALL_DIR/.env" ]; then
         mv /tmp/packrai.env "$INSTALL_DIR/.env"
         echo "==> .env installed from /tmp/packrai.env"
     else
-        echo ""
-        echo "ERROR: .env file not found. Upload it first:"
-        echo "  scp deploy/vps.env root@76.13.101.31:/tmp/packrai.env"
+        echo "ERROR: .env not found. Upload: scp deploy/vps.env root@76.13.101.31:/tmp/packrai.env"
         exit 1
     fi
 fi
 
-echo "==> Starting PackrAI stack..."
+echo "==> Starting PackrAI stack (API + Postgres)..."
 docker compose -f "$INSTALL_DIR/docker-compose.yml" --env-file "$INSTALL_DIR/.env" up -d --build
 
-echo "==> Waiting for API to be healthy..."
-for i in $(seq 1 30); do
-    if curl -sf http://localhost:3080/health >/dev/null 2>&1; then
-        echo "==> API is up!"
-        break
-    fi
-    sleep 2
-done
+echo "==> Waiting for stack to come up..."
+sleep 10
+docker compose -f "$INSTALL_DIR/docker-compose.yml" ps
 
-echo "==> Setting up nginx vhost..."
+echo "==> Setting up nginx vhost (HTTP only)..."
 cp /tmp/packrai-nginx.conf "$NGINX_CONF"
 ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/packrai-api
 nginx -t && systemctl reload nginx
 
 echo ""
-echo "==> DONE. API running at http://localhost:3080"
-echo "==> Next: point api.packrai.xyz DNS A record at 76.13.101.31"
-echo "==> Then run: certbot --nginx -d api.packrai.xyz"
+echo "==> DONE."
+echo "    API running at: http://76.13.101.31:3080  (Docker internal)"
+echo "    Nginx proxying: http://api.packrai.xyz → localhost:3080  (after DNS)"
+echo ""
+echo "==> NEXT STEPS:"
+echo "    1. Add DNS A record: api.packrai.xyz → 76.13.101.31"
+echo "    2. After DNS propagates run: certbot --nginx -d api.packrai.xyz"

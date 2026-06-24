@@ -28,3 +28,12 @@ npm-debug.log*
 # Research / local notes (reference only, not source)
 SBOM Research.txt
 *_review.md
+
+# Generated SBOM output dropped in repo root during dev/testing
+/bom.cyclonedx.json
+/bom.spdx.json
+
+# Scratch / one-off analysis files
+packrai_line_refs.txt
+packrai_perf_check.js
+packrai_perf_check.json
