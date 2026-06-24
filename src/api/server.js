@@ -11,7 +11,8 @@ const db        = require('./db');
 const { validateCycloneDX } = require('../generators/cyclonedx');
 const { enrichWithOSV }     = require('../osv');
 const { diffComponents, diffVulns } = require('../diff');
-const { explainVulnRows }   = require('../explain');
+const { explainVulnRows }         = require('../explain');
+const { startKEVRefresh, applyKEVAfterIngest } = require('../kev');
 
 // ── Startup guard ─────────────────────────────────────────────────────────────
 if (!process.env.HMAC_SECRET) {
@@ -430,7 +431,11 @@ app.post('/api/v1/ingest', ingestLimiter, requireScope('sbom:ingest'), async (re
         // Fire-and-forget OSV enrichment when payload had no vulnerability data
         if (!cyclonedx.vulnerabilities?.length && purlToCompId.size > 0) {
             osvEnrichAsync(req.org.id, cyclonedx.components.filter(c => c.purl), purlToCompId)
+                .then(() => applyKEVAfterIngest(req.org.id))
                 .catch(err => console.error('[osv-enrich]', err.message));
+        } else {
+            // Vulns came from the CycloneDX payload — cross-reference KEV immediately
+            applyKEVAfterIngest(req.org.id);
         }
     } catch (err) {
         console.error('[ingest]', err.message);
@@ -678,7 +683,7 @@ app.post('/api/v1/apps/:name/explain', requireScope('sbom:read'), async (req, re
         // Fetch vulns from latest SBOM via app_latest_sboms
         const { rows: vulnRows } = await db.query(
             `SELECT c.name, c.version, c.ecosystem,
-                    v.osv_id, v.cve_id, v.severity, v.cvss_score, v.fixed_version, v.title
+                    v.osv_id, v.cve_id, v.severity, v.cvss_score, v.fixed_version, v.title, v.kev
              FROM app_latest_sboms ls
              JOIN sbom_components sc ON sc.sbom_id = ls.sbom_id
              JOIN components c       ON c.id = sc.component_id
@@ -923,6 +928,7 @@ app.post('/api/v1/orgs', async (req, res) => {
 const PORT = process.env.PORT || 3080;
 app.listen(PORT, () => {
     process.stdout.write(`PackrAI API listening on :${PORT}\n`);
+    if (process.env.KATZILLA_API_KEY) startKEVRefresh();
 });
 
 module.exports = app;

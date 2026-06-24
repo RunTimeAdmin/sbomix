@@ -28,18 +28,20 @@ function getClient() {
  * @param {string}   projectName - used in the prompt for context
  * @returns {Promise<string>}    - plain-English explanation + remediation steps
  */
-async function explainVulnerabilities(components, projectName) {
+async function explainVulnerabilities(components, projectName, kevSet = null) {
     const vulnComponents = components.filter(c => c.vulnerabilities?.length);
     if (!vulnComponents.length) return null;
 
     // Build a compact summary: only what the model needs
     const vulnSummary = vulnComponents.map(c => {
-        const vulns = c.vulnerabilities.map(v =>
-            `  - ${v.id}  severity=${v.severity ?? 'unknown'}` +
-            (v.cvss   ? `  CVSS=${v.cvss}`       : '') +
-            (v.fixedIn?.[0] ? `  fix=${v.fixedIn[0]}` : '  no-fix-available') +
-            (v.summary ? `\n    ${v.summary}`    : '')
-        ).join('\n');
+        const vulns = c.vulnerabilities.map(v => {
+            const isKEV = kevSet && (kevSet.has(v.id) || v.aliases?.some(a => kevSet.has(a)));
+            return `  - ${v.id}  severity=${v.severity ?? 'unknown'}` +
+                (v.cvss        ? `  CVSS=${v.cvss}`        : '') +
+                (v.fixedIn?.[0] ? `  fix=${v.fixedIn[0]}`  : '  no-fix-available') +
+                (isKEV         ? '  [CISA KEV — actively exploited in the wild]' : '') +
+                (v.summary     ? `\n    ${v.summary}`       : '');
+        }).join('\n');
 
         const deps = c.dependedOnBy?.length
             ? `    pulled in by: ${c.dependedOnBy.slice(0, 5).join(', ')}`
@@ -98,9 +100,10 @@ async function explainVulnRows(vulnRows, appName) {
     const vulnSummary = [...byComp.values()].map(c => {
         const vulns = c.vulns.map(v =>
             `  - ${v.osv_id}  severity=${v.severity ?? 'unknown'}` +
-            (v.cvss_score   ? `  CVSS=${v.cvss_score}`     : '') +
-            (v.fixed_version ? `  fix=${v.fixed_version}`   : '  no-fix-available') +
-            (v.title         ? `\n    ${v.title}`           : '')
+            (v.cvss_score    ? `  CVSS=${v.cvss_score}`    : '') +
+            (v.fixed_version ? `  fix=${v.fixed_version}`  : '  no-fix-available') +
+            (v.kev           ? '  [CISA KEV — actively exploited in the wild]' : '') +
+            (v.title         ? `\n    ${v.title}`          : '')
         ).join('\n');
         return `${c.name}@${c.version} (${c.ecosystem})\n${vulns}`;
     }).join('\n\n');

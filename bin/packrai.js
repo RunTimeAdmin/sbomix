@@ -30,6 +30,7 @@ const fs    = require('fs');
 const { generateFromDirectory } = require('../src/pipeline');
 const { diffCycloneDX } = require('../src/diff');
 const { explainVulnerabilities } = require('../src/explain');
+const { fetchKEVSet }            = require('../src/kev');
 const { isGitHubTarget, parseGitHubTarget, cloneRepo } = require('../src/github');
 const pkg = require('../package.json');
 
@@ -231,7 +232,8 @@ program
                     } else {
                         process.stdout.write('\n  \x1b[2mAsking DeepSeek for remediation advice…\x1b[0m\n');
                         try {
-                            const advice = await explainVulnerabilities(result.components, repoName);
+                            const kevSet = await fetchKEVSet().catch(() => null);
+                            const advice = await explainVulnerabilities(result.components, repoName, kevSet);
                             if (advice) {
                                 console.log('\n\x1b[1m  AI Remediation Advice\x1b[0m');
                                 console.log('  ' + '─'.repeat(50));

@@ -156,3 +156,18 @@ CREATE TABLE vex_statements (
 
 CREATE INDEX idx_vex_org_osv   ON vex_statements(org_id, osv_id);
 CREATE INDEX idx_vex_component ON vex_statements(component_id);
+
+-- ── CISA KEV catalog (global, refreshed daily from katzilla.dev) ──────────────
+-- Not org-scoped — the KEV catalog is public data shared across all orgs.
+CREATE TABLE kev_catalog (
+    cve_id         TEXT        PRIMARY KEY,
+    date_added     DATE,
+    due_date       DATE,
+    ransomware_use TEXT,
+    refreshed_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- kev flag on vulnerabilities — set TRUE when the osv_id/cve_id is in kev_catalog
+ALTER TABLE vulnerabilities ADD COLUMN kev BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE INDEX idx_vulns_kev ON vulnerabilities(org_id) WHERE kev = TRUE;
