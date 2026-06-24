@@ -17,7 +17,7 @@ services:
   api:
     build: .
     ports:
-      - "${PORT:-3080}:3080"
+      - "127.0.0.1:${PORT:-3080}:3080"
     environment:
       DATABASE_URL:      postgres://packrai:${POSTGRES_PASSWORD:-changeme}@db:5432/packrai
       ADMIN_KEY:         ${ADMIN_KEY:?ADMIN_KEY must be set in .env}
