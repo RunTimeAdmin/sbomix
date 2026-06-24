@@ -1,0 +1,14 @@
+{
+  "name": "packrai-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PackrAI hosted API server — not published to npm",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^4.19.2",
+    "express-rate-limit": "^8.5.2",
+    "helmet": "^8.2.0",
+    "pg": "^8.12.0",
+    "stripe": "^16.12.0"
+  }
+}

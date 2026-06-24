@@ -27,7 +27,14 @@ npm-debug.log*
 
 # Research / local notes (reference only, not source)
 SBOM Research.txt
+Stripe.txt
 *_review.md
+
+# Landing page — separate deployment, not part of the npm package
+packrai.xyz/
+
+# VPS environment file — contains server credentials
+deploy/vps.env
 
 # Generated SBOM output dropped in repo root during dev/testing
 /bom.cyclonedx.json

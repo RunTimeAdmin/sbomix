@@ -1,9 +1,12 @@
 'use strict';
 
-const { spawnSync } = require('child_process');
+const { spawnSync, execFile } = require('child_process');
+const { promisify } = require('util');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Parse a GitHub target string into { owner, repo, ref }
@@ -105,4 +108,55 @@ function cloneRepo(target, opts = {}) {
     return { dir: tmpDir, commitSha, cleanup };
 }
 
-module.exports = { parseGitHubTarget, isGitHubTarget, cloneRepo };
+/**
+ * Async version of cloneRepo — uses execFile so it doesn't block the event loop.
+ * Used by the API server for background scan jobs.
+ */
+async function cloneRepoAsync(target, opts = {}) {
+    const { owner, repo, ref } = target;
+    const remoteUrl = `https://github.com/${owner}/${repo}.git`;
+
+    const spawnEnv = { ...process.env };
+    if (opts.token) {
+        const b64 = Buffer.from(`x-access-token:${opts.token}`).toString('base64');
+        spawnEnv.GIT_CONFIG_COUNT   = '1';
+        spawnEnv.GIT_CONFIG_KEY_0   = 'http.https://github.com/.extraHeader';
+        spawnEnv.GIT_CONFIG_VALUE_0 = `Authorization: Basic ${b64}`;
+    }
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), `packrai-${repo}-`));
+    const args   = ['clone', '--depth=1', '--single-branch', '--no-tags'];
+    if (ref) args.push('--branch', ref);
+    args.push(remoteUrl, tmpDir);
+
+    try {
+        await execFileAsync('git', args, { env: spawnEnv, timeout: 90_000 });
+    } catch (err) {
+        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+        const msg = (err.stderr || err.stdout || err.message || '').trim();
+        if (msg.includes('not found') || msg.includes('Repository not found')) {
+            throw new Error(`Repository not found: ${owner}/${repo}`);
+        }
+        if (msg.includes('Remote branch') && msg.includes('not found')) {
+            throw new Error(`Ref '${ref}' not found in ${owner}/${repo}`);
+        }
+        if (err.killed || err.signal === 'SIGTERM') {
+            throw new Error(`Clone timed out — this repository may be too large. Use the CLI for large repos.`);
+        }
+        throw new Error(`Clone failed: ${msg.slice(0, 200)}`);
+    }
+
+    let commitSha;
+    try {
+        const { stdout } = await execFileAsync('git', ['-C', tmpDir, 'rev-parse', 'HEAD'], { timeout: 5_000 });
+        commitSha = stdout.trim();
+    } catch {}
+
+    const cleanup = () => {
+        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    };
+
+    return { dir: tmpDir, commitSha, cleanup };
+}
+
+module.exports = { parseGitHubTarget, isGitHubTarget, cloneRepo, cloneRepoAsync };

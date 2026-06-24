@@ -8,8 +8,15 @@ CREATE TABLE organizations (
     email      TEXT        UNIQUE,
     -- Stores HMAC-SHA256(plaintext_key, HMAC_SECRET) — plaintext never persisted.
     -- Legacy org:admin key; prefer api_keys table for new issuance.
-    api_key    TEXT        UNIQUE NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    api_key     TEXT        UNIQUE NOT NULL,
+    vuln_alerts            BOOLEAN NOT NULL DEFAULT TRUE,
+    plan                   TEXT    NOT NULL DEFAULT 'free'
+                                   CHECK (plan IN ('free','starter','team','business','enterprise')),
+    stripe_customer_id     TEXT    UNIQUE,
+    stripe_subscription_id TEXT    UNIQUE,
+    subscription_status    TEXT,   -- active | trialing | past_due | canceled | unpaid
+    current_period_end     TIMESTAMPTZ,
+    created_at             TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ── API Keys (scoped, rotatable) ──────────────────────────────────────────────
@@ -172,3 +179,32 @@ CREATE TABLE kev_catalog (
 ALTER TABLE vulnerabilities ADD COLUMN kev BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE INDEX idx_vulns_kev ON vulnerabilities(org_id) WHERE kev = TRUE;
+
+-- ── Email verifications ───────────────────────────────────────────────────────
+-- Holds pending registrations until the user clicks the link.
+-- Unique on email so re-registrations overwrite the stale token.
+-- ── Scan jobs (server-side async repo scans) ─────────────────────────────────
+CREATE TABLE scan_jobs (
+    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id     UUID        NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    repo       TEXT        NOT NULL,
+    ref        TEXT,
+    status     TEXT        NOT NULL DEFAULT 'pending'
+                           CHECK (status IN ('pending','running','done','failed')),
+    error      TEXT,
+    sbom_id    UUID        REFERENCES sboms(id) ON DELETE SET NULL,
+    app_name   TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX idx_scan_jobs_org ON scan_jobs(org_id, created_at DESC);
+
+-- ── Email verifications ───────────────────────────────────────────────────────
+CREATE TABLE email_verifications (
+    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    email      TEXT        NOT NULL UNIQUE,
+    org_name   TEXT        NOT NULL,
+    token      TEXT        NOT NULL UNIQUE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
