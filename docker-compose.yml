@@ -27,6 +27,8 @@ services:
       KATZILLA_API_KEY:  ${KATZILLA_API_KEY:-}
       CORS_ORIGIN:       ${CORS_ORIGIN:-}
       ENABLE_ADMIN_API:  ${ENABLE_ADMIN_API:-}
+      RESEND_API_KEY:    ${RESEND_API_KEY:-}
+      RESEND_FROM:       ${RESEND_FROM:-}
     depends_on:
       db:
         condition: service_healthy
