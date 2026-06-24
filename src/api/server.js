@@ -11,6 +11,7 @@ const db        = require('./db');
 const { validateCycloneDX } = require('../generators/cyclonedx');
 const { enrichWithOSV }     = require('../osv');
 const { diffComponents, diffVulns } = require('../diff');
+const { explainVulnRows }   = require('../explain');
 
 // ── Startup guard ─────────────────────────────────────────────────────────────
 if (!process.env.HMAC_SECRET) {
@@ -655,6 +656,49 @@ app.get('/api/v1/apps/:name/diff', requireScope('sbom:read'), async (req, res) =
     } catch (err) {
         console.error('[diff]', err.message);
         res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ── AI explain ───────────────────────────────────────────────────────────────
+// POST /api/v1/apps/:name/explain
+// Returns an AI-generated vulnerability summary and remediation plan.
+// Requires DEEPSEEK_API_KEY to be set on the server.
+app.post('/api/v1/apps/:name/explain', requireScope('sbom:read'), async (req, res) => {
+    if (!process.env.DEEPSEEK_API_KEY) {
+        return res.status(501).json({ error: 'AI explain is not configured on this server (DEEPSEEK_API_KEY not set)' });
+    }
+    try {
+        const appRes = await db.query(
+            `SELECT id FROM applications WHERE org_id = $1 AND name = $2`,
+            [req.org.id, req.params.name]
+        );
+        if (!appRes.rows.length) return res.status(404).json({ error: 'App not found' });
+        const appId = appRes.rows[0].id;
+
+        // Fetch vulns from latest SBOM via app_latest_sboms
+        const { rows: vulnRows } = await db.query(
+            `SELECT c.name, c.version, c.ecosystem,
+                    v.osv_id, v.cve_id, v.severity, v.cvss_score, v.fixed_version, v.title
+             FROM app_latest_sboms ls
+             JOIN sbom_components sc ON sc.sbom_id = ls.sbom_id
+             JOIN components c       ON c.id = sc.component_id
+             JOIN vulnerabilities v  ON v.component_id = c.id AND v.org_id = $1
+             LEFT JOIN vex_statements vx
+                    ON vx.component_id = c.id AND vx.osv_id = v.osv_id AND vx.org_id = $1
+             WHERE ls.app_id = $2 AND (vx.status IS NULL OR vx.status != 'not_affected')
+             ORDER BY v.severity DESC NULLS LAST`,
+            [req.org.id, appId]
+        );
+
+        if (!vulnRows.length) {
+            return res.json({ explanation: 'No active vulnerabilities found for this app.' });
+        }
+
+        const explanation = await explainVulnRows(vulnRows, req.params.name);
+        res.json({ explanation, vulnerabilityCount: vulnRows.length });
+    } catch (err) {
+        console.error('[explain]', err.message);
+        res.status(500).json({ error: 'Explain failed' });
     }
 });
 

@@ -29,6 +29,7 @@ const path  = require('path');
 const fs    = require('fs');
 const { generateFromDirectory } = require('../src/pipeline');
 const { diffCycloneDX } = require('../src/diff');
+const { explainVulnerabilities } = require('../src/explain');
 const { isGitHubTarget, parseGitHubTarget, cloneRepo } = require('../src/github');
 const pkg = require('../package.json');
 
@@ -111,6 +112,7 @@ program
     .option('--no-recursive',       'Do not recurse into subdirectories')
     .option('--format <fmt>',       'Output format: both|cyclonedx|spdx',      'both')
     .option('--license-check',      'Flag forbidden/restricted licenses; exit 1 if any found')
+    .option('--explain',            'Use AI to explain vulnerabilities and suggest a remediation plan (requires DEEPSEEK_API_KEY)')
     .option('--json',               'Print summary as JSON (machine-readable)')
     .action(async (source, opts) => {
         let scanDir   = null;
@@ -220,6 +222,29 @@ program
                         }
                         console.log(dim(`License score ${lc.score}/100`));
                     }
+                }
+
+                // ── AI remediation advice ─────────────────────────────────────
+                if (opts.explain && stats.vulnerabilities > 0) {
+                    if (!process.env.DEEPSEEK_API_KEY) {
+                        console.log(warn('--explain requires DEEPSEEK_API_KEY to be set'));
+                    } else {
+                        process.stdout.write('\n  \x1b[2mAsking DeepSeek for remediation advice…\x1b[0m\n');
+                        try {
+                            const advice = await explainVulnerabilities(result.components, repoName);
+                            if (advice) {
+                                console.log('\n\x1b[1m  AI Remediation Advice\x1b[0m');
+                                console.log('  ' + '─'.repeat(50));
+                                for (const line of advice.split('\n')) {
+                                    console.log('  ' + line);
+                                }
+                            }
+                        } catch (e) {
+                            console.log(warn(`AI explain failed: ${e.message}`));
+                        }
+                    }
+                } else if (opts.explain && stats.vulnerabilities === 0) {
+                    console.log(ok('No vulnerabilities to explain'));
                 }
 
                 console.log('');
