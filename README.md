@@ -74,8 +74,10 @@ flowchart LR
     subgraph engine["PackrAI Engine"]
         direction TB
         D[Detect] --> E[Parse dep graph]
+        D --> DF[Dockerfile audit\nsecurity findings]
         E --> F[Enrich: licenses\ndeps.dev API]
         E --> G[Enrich: vulns\nOSV batch API]
+        DF --> BV[Base image CVEs\nDocker SBOM attestation]
         G --> N[CISA KEV flag\nkatzilla.dev]
         G --> O[AI explain\nDeepSeek-V3]
     end
@@ -120,6 +122,8 @@ Lock files are the resolved dependency graph — authoritative, deterministic, a
 | **Central repo** | ✅ | ❌ | ❌ |
 | **CISA KEV flag** | ✅ | ❌ | ❌ |
 | **AI remediation** | ✅ | ❌ | ❌ |
+| **Dockerfile audit** | ✅ | ❌ | ❌ |
+| **Base image CVEs** | ✅ (no Docker) | ❌ | ✅ (requires Docker) |
 
 ### Benchmark Results
 
@@ -172,6 +176,42 @@ After scanning, sends your vulnerability list to [DeepSeek-V3](https://platform.
 - CISA KEV callouts for actively-exploited entries
 
 Available both as a CLI flag (`--explain`) and as a REST endpoint (`POST /api/v1/apps/:name/explain`). Requires `DEEPSEEK_API_KEY`. The API endpoint returns `501` if the key is not configured, so it degrades gracefully.
+
+### Dockerfile Security Audit
+
+PackrAI automatically detects and audits every `Dockerfile` in your project tree (including `Dockerfile.prod`, `Dockerfile.dev`, etc.) and reports security findings alongside the SBOM:
+
+| Rule | Severity | What it catches |
+|------|----------|-----------------|
+| `unpinned-base-image` | HIGH | `:latest` tag or no tag |
+| `no-digest-pin` | MEDIUM | tag present but no `@sha256:...` digest |
+| `explicit-root-user` | HIGH | `USER root` or `USER 0` |
+| `no-user-directive` | MEDIUM | no `USER` directive (defaults to root) |
+| `secret-in-env` | HIGH | `ENV`/`ARG` with password/token/secret keyword |
+| `add-instead-of-copy` | LOW | `ADD` used for plain file copies |
+| `no-healthcheck` | LOW | no `HEALTHCHECK` directive |
+
+Multi-stage builds are detected. Use `--no-docker` to skip Dockerfile scanning entirely.
+
+### Base Image CVE Lookup
+
+For Docker Official Images (`node`, `nginx`, `python`, `ubuntu`, etc.), PackrAI pulls the SBOM attestation directly from the Docker Hub OCI registry and queries OSV for known CVEs — with no Docker installation required.
+
+```
+Dockerfile  ·  2 MEDIUM  1 LOW  · multi-stage
+  [MEDIUM] no-digest-pin:1  Base image 'node:20-alpine' has no digest pin
+  base: node:20-alpine  ·  32 CVEs
+32 base-image CVEs
+```
+
+How it works:
+1. Anonymous OAuth token from Docker Hub auth service
+2. Fetch the OCI image index (multi-platform manifest list)
+3. Locate the linux/amd64 SBOM attestation entry
+4. Pull the in-toto statement blob containing the SPDX 2.3 package list
+5. Batch-query OSV for CVEs across all OS packages
+
+Base image components appear in the CycloneDX output as `type: container` with `pkg:docker/library/node@20-alpine` PURLs. If no SBOM attestation is available (private or older images), the lookup returns `no CVE data` gracefully without failing the pipeline.
 
 ### Quality Score
 Every SBOM gets a completeness score (0–100) measuring alignment with CISA 2025 minimum elements: purl coverage, hash coverage, license coverage, and lock-file fidelity.
@@ -297,6 +337,7 @@ Scan options:
   --explain             AI remediation advice via DeepSeek-V3 (requires DEEPSEEK_API_KEY)
   --no-vulns            Skip OSV vulnerability enrichment
   --no-licenses         Skip deps.dev license enrichment
+  --no-docker           Skip Dockerfile audit and base image CVE lookup
   --no-recursive        Do not recurse into subdirectories
   --json                Print summary as JSON (machine-readable, for CI)
 
@@ -459,6 +500,7 @@ packrai/
 │   ├── kev.js              CISA KEV catalog sync (katzilla.dev, daily refresh)
 │   ├── explain.js          AI remediation advice (DeepSeek-V3 via OpenAI SDK)
 │   ├── licenses.js         License enrichment (deps.dev API)
+│   ├── basevuln.js         Base image CVE lookup via Docker SBOM attestations (OCI + OSV)
 │   ├── parsers/
 │   │   ├── npm.js          package-lock.json v1/v2/v3, yarn.lock
 │   │   ├── pnpm.js         pnpm-lock.yaml v6/v9
@@ -472,7 +514,8 @@ packrai/
 │   │   ├── php.js          composer.lock
 │   │   ├── swift.js        Package.resolved
 │   │   ├── dart.js         pubspec.lock
-│   │   ├── detect.js       Lock file detection + deduplication
+│   │   ├── detect.js       Lock file detection + deduplication; Dockerfile discovery
+│   │   ├── dockerfile.js   Dockerfile static security audit (7 rules, no Docker required)
 │   │   └── index.js        Parser dispatcher
 │   ├── generators/
 │   │   ├── cyclonedx.js    CycloneDX 1.6 generator + validator
@@ -522,7 +565,7 @@ PackrAI is a **lock-file-first** SBOM generator. This makes it fast and determin
 
 | Area | Detail |
 |------|--------|
-| **Container/image scanning** | Does not scan Docker image layers or OS packages. Combine with Trivy for container SBOMs. |
+| **Container/image scanning** | Dockerfile static audit + base image CVE lookup via SBOM attestation (no Docker required). Does not walk running container layers or produce a full container SBOM. Use Trivy for full container image analysis. |
 | **Compiled binaries** | SBOMs are generated from lock files, not compiled output or vendored binaries. |
 | **No lock file → no SBOM** | `requirements.txt` produces direct-only output with a warning. Projects without any committed lock file are not supported. |
 | **Java (Maven)** | Transitive resolution requires `mvn` to be installed locally. Without it, direct deps only. |
