@@ -187,6 +187,7 @@ program
             } else {
                 const ok   = (s) => `\x1b[32m✓\x1b[0m ${s}`;
                 const warn = (s) => `\x1b[33m⚠\x1b[0m ${s}`;
+                const err  = (s) => `\x1b[31m✖\x1b[0m ${s}`;
                 const dim  = (s) => `  \x1b[2m${s}\x1b[0m`;
 
                 console.log(ok(`${stats.totalComponents} components  ·  ${stats.ecosystems.join(', ')}`));
@@ -205,7 +206,6 @@ program
 
                 // ── Dockerfile audit ──────────────────────────────────────────
                 if (result.dockerfileAudit.length > 0) {
-                    const err = (s) => `\x1b[31m✖\x1b[0m ${s}`;
                     console.log('');
                     for (const audit of result.dockerfileAudit) {
                         const rel = path.relative(scanDir, audit.path);
@@ -224,11 +224,44 @@ program
                                 console.log(dim(`  [${f.severity}] ${f.rule}${loc}  ${f.message}`));
                             }
                         }
-                        if (audit.baseImages.length > 0) {
-                            const imgs = audit.baseImages.map((i) => i.raw).join(', ');
-                            console.log(dim(`  base: ${imgs}`));
+                        // Base image CVEs (from SBOM attestation lookup)
+                        // Deduplicate — multi-stage builds often reuse the same base image
+                        const shownBase = new Set();
+                        for (const img of audit.baseImages) {
+                            if (shownBase.has(img.raw)) continue;
+                            shownBase.add(img.raw);
+
+                            const imgVulns = result.components
+                                .filter((c) => c.ecosystem === 'container' && c.name === img.name)
+                                .flatMap((c) => c.vulnerabilities || []);
+
+                            if (imgVulns.length === 0) {
+                                console.log(dim(`  base: ${img.raw}  ·  no CVE data`));
+                            } else {
+                                const crit = imgVulns.filter((v) => v.severity === 'CRITICAL').length;
+                                const high = imgVulns.filter((v) => v.severity === 'HIGH').length;
+                                const parts = [`${imgVulns.length} CVEs`];
+                                if (crit) parts.push(`${crit} CRITICAL`);
+                                if (high) parts.push(`${high} HIGH`);
+                                const vulnStr = crit > 0 ? err(parts.join('  ')) : warn(parts.join('  '));
+                                console.log(dim(`  base: ${img.raw}  ·`) + ' ' + vulnStr);
+                                // Show up to 5 critical/high CVEs
+                                const top = imgVulns
+                                    .filter((v) => v.severity === 'CRITICAL' || v.severity === 'HIGH')
+                                    .slice(0, 5);
+                                for (const v of top) {
+                                    console.log(dim(`    ${v.id}  [${v.severity}]  ${v.summary.slice(0, 80)}`));
+                                }
+                            }
                         }
                     }
+                }
+
+                if (stats.baseImageVulns > 0) {
+                    const baseLabel = stats.baseImageCritical > 0 ? err : warn;
+                    const baseParts = [`${stats.baseImageVulns} base-image CVEs`];
+                    if (stats.baseImageCritical) baseParts.push(`${stats.baseImageCritical} CRITICAL`);
+                    console.log(baseLabel(baseParts.join('  ')));
                 }
 
                 console.log(dim(`${stats.lockFilesScanned.length} lock file(s)${stats.dockerfilesScanned.length ? `  ·  ${stats.dockerfilesScanned.length} Dockerfile(s)` : ''}  ·  ${stats.elapsedMs}ms`));

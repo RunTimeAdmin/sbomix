@@ -12,6 +12,7 @@ const path = require('path');
 const { detect, detectDockerfiles } = require('./parsers/detect');
 const { parseLockFile } = require('./parsers/index');
 const { parseDockerfile } = require('./parsers/dockerfile');
+const { fetchBaseImageVulns } = require('./basevuln');
 const { enrichWithOSV } = require('./osv');
 const { enrichWithLicenses } = require('./licenses');
 const { generateCycloneDX, validateCycloneDX } = require('./generators/cyclonedx');
@@ -72,17 +73,21 @@ async function generateFromDirectory(dir, opts = {}) {
         }
     }
 
-    // 3. Parallel enrichment — library components only (not container base images)
+    // 3. Parallel enrichment — library components + base image CVE lookup
+    const baseVulnMap = new Map();
     await Promise.all([
         runLicenses && allComponents.length > 0 ? enrichWithLicenses(allComponents) : null,
         runVulns    && allComponents.length > 0 ? enrichWithOSV(allComponents)      : null,
+        runDocker   ? fetchAllBaseVulns(dockerfileAudit, baseVulnMap)               : null,
     ]);
 
-    // 3b. Add container base images to components after enrichment so they don't
-    //     affect OSV/license lookups or the quality score calculation below.
+    // 3b. Add container base images after enrichment — keeps them out of OSV/license
+    //     lookups and the quality score calculation.
     for (const audit of dockerfileAudit) {
         for (const img of audit.baseImages) {
-            allComponents.push(makeContainerComponent(img));
+            const comp = makeContainerComponent(img);
+            comp.vulnerabilities = baseVulnMap.get(img.raw) || [];
+            allComponents.push(comp);
         }
     }
 
@@ -102,11 +107,14 @@ async function generateFromDirectory(dir, opts = {}) {
     }
 
     const elapsedMs = Date.now() - startMs;
-    const { vulnCount, criticalCount } = countVulns(allComponents);
-    const licenseCompliance = assessLicenses(allComponents);
+    const libComponents = allComponents.filter((c) => c.ecosystem !== 'container');
+    const { vulnCount, criticalCount } = countVulns(libComponents);
+    const licenseCompliance = assessLicenses(libComponents);
 
-    const dockerFindings = dockerfileAudit.reduce((acc, a) => acc + a.findings.length, 0);
-    const dockerHigh     = dockerfileAudit.reduce((acc, a) => acc + a.summary.high, 0);
+    const dockerFindings    = dockerfileAudit.reduce((acc, a) => acc + a.findings.length, 0);
+    const dockerHigh        = dockerfileAudit.reduce((acc, a) => acc + a.summary.high, 0);
+    const { vulnCount: baseVulnCount, criticalCount: baseCriticalCount } =
+        countVulns(allComponents.filter((c) => c.ecosystem === 'container'));
 
     return {
         cyclonedx,
@@ -120,6 +128,8 @@ async function generateFromDirectory(dir, opts = {}) {
             dockerfilesScanned: dockerfileAudit.map((a) => a.path),
             vulnerabilities: vulnCount,
             critical: criticalCount,
+            baseImageVulns: baseVulnCount,
+            baseImageCritical: baseCriticalCount,
             qualityScore: computeQualityScore(allComponents, lockFiles),
             licenseCompliance,
             dockerFindings,
@@ -162,6 +172,22 @@ function countVulns(components) {
         }
     }
     return { vulnCount, criticalCount };
+}
+
+async function fetchAllBaseVulns(audits, vulnMap) {
+    // Deduplicate across Dockerfiles so a shared base image is only queried once
+    const unique = [...new Map(
+        audits.flatMap((a) => a.baseImages).map((i) => [i.raw, i])
+    ).values()];
+
+    await Promise.all(unique.map(async (img) => {
+        try {
+            const vulns = await fetchBaseImageVulns(img);
+            if (vulns && vulns.length > 0) vulnMap.set(img.raw, vulns);
+        } catch {
+            // best-effort — never fail the pipeline
+        }
+    }));
 }
 
 function makeContainerComponent(img) {
