@@ -125,6 +125,14 @@
   .diff-row { display: flex; gap: 12px; align-items: center; padding: 7px 12px; border-bottom: 1px solid var(--border); font-size: 12px; }
   .diff-row:last-child { border-bottom: none; }
 
+  /* ── Tabs ── */
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+  .tab { background: none; border: none; color: var(--muted); padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .15s, border-color .15s; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
   /* ── Empty / loading ── */
   .empty   { text-align: center; padding: 48px 24px; color: var(--muted); line-height: 1.6; }
   .loading { color: var(--muted); padding: 32px; text-align: center; }
@@ -216,12 +224,23 @@
   </div>
 
   <div class="section">
-    <div class="section-hd">
-      <div class="section-title">Vulnerabilities</div>
-      <button class="btn-sm" id="explain-btn">AI Explain</button>
+    <div class="tabs">
+      <button class="tab active" data-tab="vulns">Vulnerabilities</button>
+      <button class="tab" data-tab="components">Components</button>
     </div>
-    <div class="explain-panel" id="explain-panel"></div>
-    <div id="detail-vulns-wrap" class="loading"><span class="spinner"></span>Loading…</div>
+
+    <div class="tab-panel active" id="tab-vulns">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <span></span>
+        <button class="btn-sm" id="explain-btn">AI Explain</button>
+      </div>
+      <div class="explain-panel" id="explain-panel"></div>
+      <div id="detail-vulns-wrap" class="loading"><span class="spinner"></span>Loading…</div>
+    </div>
+
+    <div class="tab-panel" id="tab-components">
+      <div id="detail-comps-wrap" class="loading"><span class="spinner"></span>Loading…</div>
+    </div>
   </div>
 
   <div class="section" id="diff-section" style="display:none">
@@ -409,6 +428,11 @@ async function showDetail(appName) {
   document.getElementById('dc-kev').textContent   = '—';
   document.getElementById('detail-vulns-wrap').innerHTML =
     '<div class="loading"><span class="spinner"></span>Loading…</div>';
+  document.getElementById('detail-comps-wrap').innerHTML =
+    '<div class="loading"><span class="spinner"></span>Loading…</div>';
+  // reset tabs to vulnerabilities
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'vulns'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-vulns'));
   document.getElementById('diff-section').style.display = 'none';
   document.getElementById('diff-wrap').innerHTML = '';
   const ep = document.getElementById('explain-panel');
@@ -486,8 +510,42 @@ async function showDetail(appName) {
     vulnsEl.innerHTML = '<div class="empty">Failed to load vulnerabilities.</div>';
   }
 
-  // SBOM diff (non-blocking)
+  // Components and diff (non-blocking)
+  loadComponents(appName);
   loadDiff(appName);
+}
+
+// ── Components ────────────────────────────────────────────────────────────────
+
+async function loadComponents(appName) {
+  const el = document.getElementById('detail-comps-wrap');
+  try {
+    const data = await apiFetch(`/api/v1/apps/${encodeURIComponent(appName)}/components`);
+    const comps = data.components;
+    if (!comps.length) {
+      el.innerHTML = '<div class="empty">No components found.</div>';
+      return;
+    }
+    el.innerHTML = `
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>Component</th><th>Version</th><th>Ecosystem</th><th>Vulns</th><th>PURL</th>
+        </tr></thead>
+        <tbody>${comps.map(c => `
+          <tr>
+            <td class="mono">${esc(c.name)}</td>
+            <td class="mono c-muted">${esc(c.version)}</td>
+            <td><span class="eco">${esc(c.ecosystem)}</span></td>
+            <td>${Number(c.vuln_count) > 0
+                  ? `<span class="badge ${c.max_severity === 'CRITICAL' ? 'b-red' : 'b-yellow'}">${c.vuln_count}</span>`
+                  : '<span class="c-green">0</span>'}</td>
+            <td class="mono c-muted" style="font-size:11px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(c.purl)}">${esc(c.purl || '—')}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div>`;
+  } catch {
+    el.innerHTML = '<div class="empty">Failed to load components.</div>';
+  }
 }
 
 // ── SBOM Diff ─────────────────────────────────────────────────────────────────
@@ -662,6 +720,17 @@ async function runCVESearch() {
 document.getElementById('cve-btn').addEventListener('click', runCVESearch);
 document.getElementById('cve-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') runCVESearch();
+});
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+
+document.addEventListener('click', e => {
+  const tab = e.target.closest('.tab');
+  if (!tab) return;
+  const target = tab.dataset.tab;
+  if (!target) return;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === target));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `tab-${target}`));
 });
 
 // ── Event delegation for app navigation ──────────────────────────────────────

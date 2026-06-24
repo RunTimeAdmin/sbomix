@@ -526,6 +526,38 @@ app.get('/api/v1/apps/:name/sbom', requireScope('sbom:read'), async (req, res) =
     }
 });
 
+// GET /api/v1/apps/:name/components
+app.get('/api/v1/apps/:name/components', requireScope('sbom:read'), async (req, res) => {
+    try {
+        const appRes = await db.query(
+            `SELECT a.id FROM applications a WHERE a.org_id = $1 AND a.name = $2`,
+            [req.org.id, req.params.name]
+        );
+        if (!appRes.rows.length) return res.status(404).json({ error: 'App not found' });
+        const appId = appRes.rows[0].id;
+
+        const { rows } = await db.query(
+            `SELECT c.name, c.version, c.ecosystem, c.purl,
+                    COUNT(v.id) FILTER (WHERE vx.status IS NULL OR vx.status != 'not_affected') AS vuln_count,
+                    MAX(v.severity) AS max_severity
+             FROM app_latest_sboms ls
+             JOIN sbom_components sc    ON sc.sbom_id = ls.sbom_id
+             JOIN components c          ON c.id = sc.component_id
+             LEFT JOIN vulnerabilities v  ON v.component_id = c.id AND v.org_id = $1
+             LEFT JOIN vex_statements vx  ON vx.component_id = c.id
+                                         AND vx.osv_id = v.osv_id AND vx.org_id = $1
+             WHERE ls.app_id = $2
+             GROUP BY c.name, c.version, c.ecosystem, c.purl
+             ORDER BY vuln_count DESC, c.name`,
+            [req.org.id, appId]
+        );
+        res.json({ components: rows });
+    } catch (err) {
+        console.error('[apps/components]', err.message);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // ── CVE Search ────────────────────────────────────────────────────────────────
 app.get('/api/v1/search', requireScope('sbom:read'), async (req, res) => {
     const { cve, osv } = req.query;
