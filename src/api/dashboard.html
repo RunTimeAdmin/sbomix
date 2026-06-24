@@ -213,7 +213,13 @@
     All applications
   </button>
 
-  <div class="detail-title" id="d-name">—</div>
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:8px">
+    <div class="detail-title" id="d-name">—</div>
+    <div style="display:flex;gap:8px;flex-shrink:0;margin-top:4px">
+      <button class="btn-sm" id="export-html-btn">↓ HTML Report</button>
+      <button class="btn-sm" id="export-pdf-btn">↓ Print / PDF</button>
+    </div>
+  </div>
   <div class="detail-meta" id="d-meta"></div>
 
   <div class="detail-cards">
@@ -255,6 +261,9 @@
 const API = '';
 let apiKey = '';
 let currentApp = null;
+let currentAppMeta = null;
+let currentVulns = [];
+let currentComponents = [];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -449,6 +458,7 @@ async function showDetail(appName) {
   // Header metadata
   if (sbomRes.status === 'fulfilled') {
     const s = sbomRes.value;
+    currentAppMeta = s;
     const parts = [];
     if (s.branch)    parts.push(`<span class="detail-meta-item">⎇ ${esc(s.branch)}</span>`);
     if (s.commit_sha) parts.push(`<span class="mono" style="font-size:12px">${esc(s.commit_sha.slice(0,7))}</span>`);
@@ -470,6 +480,7 @@ async function showDetail(appName) {
   const vulnsEl = document.getElementById('detail-vulns-wrap');
   if (vulnsRes.status === 'fulfilled') {
     const vulns = vulnsRes.value.vulnerabilities;
+    currentVulns = vulns;
     const kevCount = vulns.filter(v => v.kev).length;
 
     const dvEl = document.getElementById('dc-vulns');
@@ -522,6 +533,7 @@ async function loadComponents(appName) {
   try {
     const data = await apiFetch(`/api/v1/apps/${encodeURIComponent(appName)}/components`);
     const comps = data.components;
+    currentComponents = comps;
     if (!comps.length) {
       el.innerHTML = '<div class="empty">No components found.</div>';
       return;
@@ -739,6 +751,122 @@ document.addEventListener('click', e => {
   const el = e.target.closest('[data-goto]');
   if (el) showDetail(el.dataset.goto);
 });
+
+// ── Report generation ─────────────────────────────────────────────────────────
+
+function buildReport() {
+  const app  = currentApp || '—';
+  const meta = currentAppMeta || {};
+  const vulns = currentVulns;
+  const comps = currentComponents;
+  const now   = new Date().toLocaleString();
+  const kevCount = vulns.filter(v => v.kev).length;
+  const critCount = vulns.filter(v => v.severity === 'CRITICAL').length;
+
+  const sevColor = { CRITICAL: '#f85149', HIGH: '#d29922', MEDIUM: '#8b949e', LOW: '#8b949e' };
+
+  const vulnRows = vulns.map(v => `
+    <tr>
+      <td><a href="https://osv.dev/vulnerability/${esc(v.osv_id)}" style="color:#58a6ff">${esc(v.cve_id || v.osv_id)}</a>${v.kev ? ' <span style="background:#3a1010;color:#ff6b6b;border:1px solid #f85149;border-radius:3px;font-size:10px;padding:1px 5px;font-weight:700">KEV</span>' : ''}</td>
+      <td><span style="background:${sevColor[v.severity] || '#8b949e'}22;color:${sevColor[v.severity] || '#8b949e'};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">${esc(v.severity || '—')}</span></td>
+      <td>${v.cvss_score ?? '—'}</td>
+      <td style="font-family:monospace;font-size:12px">${esc(v.component)}</td>
+      <td style="font-family:monospace;font-size:12px;color:#8b949e">${esc(v.component_version)}</td>
+      <td style="font-family:monospace;font-size:12px;color:${v.fixed_version ? '#3fb950' : '#8b949e'}">${esc(v.fixed_version || 'No fix')}</td>
+    </tr>`).join('');
+
+  const compRows = comps.map(c => `
+    <tr>
+      <td style="font-family:monospace;font-size:12px">${esc(c.name)}</td>
+      <td style="font-family:monospace;font-size:12px;color:#8b949e">${esc(c.version)}</td>
+      <td><span style="background:#58a6ff15;color:#58a6ff;border:1px solid #58a6ff30;border-radius:20px;padding:1px 8px;font-size:11px">${esc(c.ecosystem)}</span></td>
+      <td style="color:${Number(c.vuln_count) > 0 ? '#d29922' : '#3fb950'}">${c.vuln_count}</td>
+      <td style="font-family:monospace;font-size:11px;color:#8b949e;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.purl || '—')}</td>
+    </tr>`).join('');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PackrAI Report — ${esc(app)}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d1117; color: #e6edf3; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; padding: 40px; }
+  @media print {
+    body { background: #fff; color: #000; padding: 20px; }
+    a { color: #0066cc; }
+    .no-print { display: none; }
+  }
+  h1  { font-size: 22px; font-weight: 700; font-family: monospace; letter-spacing: -0.3px; }
+  h2  { font-size: 15px; font-weight: 600; margin: 32px 0 12px; padding-bottom: 8px; border-bottom: 1px solid #30363d; }
+  .meta { color: #8b949e; font-size: 13px; margin: 6px 0 24px; display: flex; flex-wrap: wrap; gap: 16px; }
+  .stats { display: flex; gap: 24px; margin-bottom: 32px; }
+  .stat { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px 20px; min-width: 110px; }
+  .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: #8b949e; margin-bottom: 4px; }
+  .stat-value { font-size: 26px; font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 8px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: #8b949e; border-bottom: 2px solid #30363d; }
+  td { padding: 9px 12px; border-bottom: 1px solid #21262d; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  .footer { margin-top: 40px; color: #8b949e; font-size: 12px; text-align: center; padding-top: 16px; border-top: 1px solid #30363d; }
+  .print-btn { background: #3fb950; color: #000; font-weight: 700; border: none; padding: 8px 20px; border-radius: 6px; cursor: pointer; font-size: 13px; margin-bottom: 24px; }
+</style>
+</head>
+<body>
+<button class="print-btn no-print" onclick="window.print()">Print / Save as PDF</button>
+<h1>${esc(app)}</h1>
+<div class="meta">
+  ${meta.branch ? `<span>⎇ ${esc(meta.branch)}</span>` : ''}
+  ${meta.commit_sha ? `<span style="font-family:monospace">${esc(meta.commit_sha.slice(0,7))}</span>` : ''}
+  ${meta.version && meta.version !== 'unknown' ? `<span>v${esc(meta.version)}</span>` : ''}
+  <span>Generated ${now}</span>
+  <span>PackrAI Security Report</span>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="stat-label">Components</div><div class="stat-value">${comps.length}</div></div>
+  <div class="stat"><div class="stat-label">Vulnerabilities</div><div class="stat-value" style="color:#d29922">${vulns.length}</div></div>
+  <div class="stat"><div class="stat-label">Critical</div><div class="stat-value" style="color:#f85149">${critCount}</div></div>
+  <div class="stat"><div class="stat-label">KEV</div><div class="stat-value" style="color:#f85149">${kevCount}</div></div>
+</div>
+
+<h2>Vulnerabilities (${vulns.length})</h2>
+${vulns.length ? `<table>
+  <thead><tr><th>CVE / OSV ID</th><th>Severity</th><th>CVSS</th><th>Component</th><th>Version</th><th>Fix</th></tr></thead>
+  <tbody>${vulnRows}</tbody>
+</table>` : '<p style="color:#3fb950">✓ No active vulnerabilities.</p>'}
+
+<h2>Components (${comps.length})</h2>
+${comps.length ? `<table>
+  <thead><tr><th>Name</th><th>Version</th><th>Ecosystem</th><th>Vulns</th><th>PURL</th></tr></thead>
+  <tbody>${compRows}</tbody>
+</table>` : '<p style="color:#8b949e">No components found.</p>'}
+
+<div class="footer">PackrAI · api.packrai.xyz · ${esc(app)} · ${now}</div>
+</body>
+</html>`;
+}
+
+function downloadHTML() {
+  const html = buildReport();
+  const blob = new Blob([html], { type: 'text/html' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `packrai-${currentApp}-${new Date().toISOString().slice(0,10)}.html`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function printReport() {
+  const html = buildReport();
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+  win.addEventListener('load', () => win.print());
+}
+
+document.getElementById('export-html-btn').addEventListener('click', downloadHTML);
+document.getElementById('export-pdf-btn').addEventListener('click', printReport);
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
