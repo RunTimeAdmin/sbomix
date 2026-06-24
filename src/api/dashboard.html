@@ -125,6 +125,10 @@
   .diff-row { display: flex; gap: 12px; align-items: center; padding: 7px 12px; border-bottom: 1px solid var(--border); font-size: 12px; }
   .diff-row:last-child { border-bottom: none; }
 
+  /* ── SBOM dropdown ── */
+  .sbom-dl-item { display: block; width: 100%; text-align: left; background: none; border: none; color: var(--text); padding: 9px 16px; font-size: 13px; cursor: pointer; transition: background .1s; }
+  .sbom-dl-item:hover { background: rgba(88,166,255,.08); color: var(--blue); }
+
   /* ── Tabs ── */
   .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
   .tab { background: none; border: none; color: var(--muted); padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .15s, border-color .15s; }
@@ -218,6 +222,13 @@
     <div style="display:flex;gap:8px;flex-shrink:0;margin-top:4px">
       <button class="btn-sm" id="export-html-btn">↓ HTML Report</button>
       <button class="btn-sm" id="export-pdf-btn">↓ Print / PDF</button>
+      <div style="position:relative;display:inline-block">
+        <button class="btn-sm" id="sbom-dl-btn">↓ SBOM ▾</button>
+        <div id="sbom-dl-menu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--surface);border:1px solid var(--border);border-radius:6px;min-width:160px;z-index:20;overflow:hidden">
+          <button class="sbom-dl-item" data-fmt="cyclonedx">CycloneDX JSON</button>
+          <button class="sbom-dl-item" data-fmt="spdx">SPDX JSON</button>
+        </div>
+      </div>
     </div>
   </div>
   <div class="detail-meta" id="d-meta"></div>
@@ -867,6 +878,43 @@ function printReport() {
 
 document.getElementById('export-html-btn').addEventListener('click', downloadHTML);
 document.getElementById('export-pdf-btn').addEventListener('click', printReport);
+
+// SBOM download dropdown
+const sbomDlBtn  = document.getElementById('sbom-dl-btn');
+const sbomDlMenu = document.getElementById('sbom-dl-menu');
+
+sbomDlBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  sbomDlMenu.style.display = sbomDlMenu.style.display === 'none' ? 'block' : 'none';
+});
+
+document.addEventListener('click', () => { sbomDlMenu.style.display = 'none'; });
+
+document.querySelectorAll('.sbom-dl-item').forEach(item => {
+  item.addEventListener('click', async () => {
+    sbomDlMenu.style.display = 'none';
+    const fmt = item.dataset.fmt;
+    const url = `/api/v1/apps/${encodeURIComponent(currentApp)}/sbom/download?format=${fmt}`;
+    try {
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
+      if (r.status === 404) {
+        const err = await r.json();
+        alert(err.error || 'SBOM not available in that format.');
+        return;
+      }
+      if (!r.ok) { alert('Download failed.'); return; }
+      const blob = await r.blob();
+      const ext  = fmt === 'spdx' ? 'spdx.json' : 'cdx.json';
+      const a    = document.createElement('a');
+      a.href     = URL.createObjectURL(blob);
+      a.download = `${currentApp}-sbom.${ext}`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      alert('Download failed.');
+    }
+  });
+});
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 

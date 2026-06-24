@@ -558,6 +558,43 @@ app.get('/api/v1/apps/:name/components', requireScope('sbom:read'), async (req, 
     }
 });
 
+// GET /api/v1/apps/:name/sbom/download?format=cyclonedx|spdx
+app.get('/api/v1/apps/:name/sbom/download', requireScope('sbom:read'), async (req, res) => {
+    const format = (req.query.format || 'cyclonedx').toLowerCase();
+    if (!['cyclonedx', 'spdx'].includes(format)) {
+        return res.status(400).json({ error: 'format must be cyclonedx or spdx' });
+    }
+    try {
+        const { rows } = await db.query(
+            `SELECT s.cyclonedx, s.spdx, s.version, s.created_at
+             FROM sboms s
+             JOIN applications a ON a.id = s.app_id
+             WHERE a.org_id = $1 AND a.name = $2
+             ORDER BY s.created_at DESC LIMIT 1`,
+            [req.org.id, req.params.name]
+        );
+        if (!rows.length) return res.status(404).json({ error: 'App not found' });
+
+        const row = rows[0];
+        if (format === 'spdx') {
+            if (!row.spdx) return res.status(404).json({ error: 'No SPDX document stored for this app' });
+            const filename = `${req.params.name}-sbom.spdx.json`;
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+            return res.json(row.spdx);
+        }
+
+        // CycloneDX (always present)
+        const filename = `${req.params.name}-sbom.cdx.json`;
+        res.setHeader('Content-Type', 'application/vnd.cyclonedx+json');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.json(row.cyclonedx);
+    } catch (err) {
+        console.error('[sbom/download]', err.message);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // ── CVE Search ────────────────────────────────────────────────────────────────
 app.get('/api/v1/search', requireScope('sbom:read'), async (req, res) => {
     const { cve, osv } = req.query;
