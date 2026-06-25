@@ -31,7 +31,7 @@ const AIBOM_SPEC = 'packrai-aibom/1.0';
  * @param {object}   [params.lineageEntries] - explicit lifecycle entries; otherwise derived
  * @returns {object} the assembled (and possibly signed) AI BOM
  */
-function buildAIBomDocument({ aiComponents = [], threats = [], meta = {}, keys = null, lineageEntries = null }) {
+function buildAIBomDocument({ aiComponents = [], threats = [], meta = {}, keys = null, lineageEntries = null, agentic = null }) {
     const lineage = lineageEntries
         ? require('./lineage').buildLineage(lineageEntries)
         : lineageFromComponents(aiComponents, meta);
@@ -52,7 +52,7 @@ function buildAIBomDocument({ aiComponents = [], threats = [], meta = {}, keys =
         signature = signDocument(signable, keys, { hybrid: true });
     }
 
-    const compliance = assessCompliance({ aiComponents, threats, lineage, lineageVerification, signature });
+    const compliance = assessCompliance({ aiComponents, threats, lineage, lineageVerification, signature, agentic });
 
     return {
         bomFormat:   'PackrAI-AIBOM',
@@ -70,10 +70,19 @@ function buildAIBomDocument({ aiComponents = [], threats = [], meta = {}, keys =
             component: t.component, description: t.description, mitigations: t.mitigations,
         })),
         compliance,
+        agentic: agentic ? {
+            mcpServers: agentic.mcpServers,
+            prompts:    (agentic.prompts || []).map((p) => ({ name: p.name, path: p.path, sha256: p.sha256 })),
+            boundaries: agentic.boundaries,
+        } : null,
         summary: {
             aiModels:        aiComponents.filter((c) => ['model-weights', 'code-reference'].includes(c.aiMetadata?.role)).length,
             apiProviders:    aiComponents.filter((c) => c.aiMetadata?.role === 'api-provider').length,
             frameworks:      aiComponents.filter((c) => c.aiMetadata?.role === 'framework').length,
+            datasets:        aiComponents.filter((c) => c.aiMetadata?.role === 'dataset').length,
+            mcpServers:      aiComponents.filter((c) => c.aiMetadata?.role === 'mcp-server').length,
+            prompts:         aiComponents.filter((c) => c.aiMetadata?.role === 'prompt').length,
+            leastAgencyScore: agentic?.boundaries?.leastAgencyScore ?? null,
             criticalThreats: threats.filter((t) => t.severity === 'CRITICAL').length,
             highThreats:     threats.filter((t) => t.severity === 'HIGH').length,
         },

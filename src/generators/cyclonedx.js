@@ -39,12 +39,43 @@ function generateCycloneDX(components, meta = {}) {
         metadata: buildMetadata(meta, timestamp),
         components: deduped.map(cdxComponent),
         dependencies: buildDependencies(deduped),
+        compositions: buildCompositions(deduped, meta),
     };
 
     const vulns = buildVulnerabilities(deduped);
     if (vulns.length > 0) bom.vulnerabilities = vulns;
 
     return bom;
+}
+
+/**
+ * Completeness declaration (CycloneDX `compositions`) — Pillar 5.
+ *
+ * Declares how complete the BOM's knowledge is. Library deps from a lock file
+ * are a `complete` graph. AI components are inherently `incomplete`: detection
+ * finds what is referenced locally, but a model's full training-data lineage
+ * and runtime tool set cannot be proven from a static scan — declaring this
+ * honestly is exactly what the spec's aggregate field is for.
+ */
+function buildCompositions(components, meta) {
+    const rootRef = meta.name ? undefined : undefined; // root carried via metadata.component
+    const libRefs = components.filter((c) => c.ecosystem !== 'ai').map((c) => c.purl);
+    const aiRefs  = components.filter((c) => c.ecosystem === 'ai').map((c) => c.purl);
+
+    const compositions = [];
+    if (libRefs.length) {
+        compositions.push({ aggregate: 'complete', assemblies: libRefs });
+    }
+    if (aiRefs.length) {
+        // AI composition is incomplete: training data + agent tool scope are not
+        // fully knowable from a static scan.
+        compositions.push({ aggregate: 'incomplete', assemblies: aiRefs });
+    }
+    if (!compositions.length) {
+        compositions.push({ aggregate: 'unknown', assemblies: [] });
+    }
+    void rootRef;
+    return compositions;
 }
 
 function buildMetadata(meta, timestamp) {
@@ -97,10 +128,12 @@ function cdxComponent(comp) {
         c.scope = comp.scope === 'dev' ? 'excluded' : 'optional';
     }
 
-    // CycloneDX 1.6 AI/ML extensions
-    if (comp.type === 'machine-learning-model') {
-        if (comp.modelCard) c.modelCard = comp.modelCard;
-
+    // CycloneDX 1.6 AI/ML extensions — modelCard for models, properties for any
+    // AI component (datasets, MCP servers, prompts carry aiMetadata too).
+    if (comp.type === 'machine-learning-model' && comp.modelCard) {
+        c.modelCard = comp.modelCard;
+    }
+    if (comp.ecosystem === 'ai') {
         const props = buildAIProperties(comp.aiMetadata || {});
         if (props.length > 0) c.properties = props;
     }
@@ -113,6 +146,7 @@ function buildAIProperties(meta) {
         (value !== null && value !== undefined && value !== '')
             ? { name: `packrai:ai:${name}`, value: String(value) }
             : null;
+    const a = meta.authority || {};
     return [
         p('role',          meta.role),
         p('source',        meta.source),
@@ -126,6 +160,20 @@ function buildAIProperties(meta) {
         p('fileSizeMB',    meta.fileSizeMB),
         p('referencedIn',  meta.referencedIn),
         p('lastModified',  meta.lastModified),
+        // Pillar 1: architecture & parameters
+        p('precision',     meta.precision),
+        p('quantization',  meta.quantization),
+        p('paramCountEstimate', meta.paramCountEstimate),
+        p('contextLength', meta.contextLength),
+        p('weightFile',    meta.weightFile),
+        // Pillar 4: agentic context
+        p('transport',     meta.transport),
+        p('command',       meta.command),
+        p('requiresAuth',  meta.requiresAuth === undefined ? null : String(meta.requiresAuth)),
+        a.shellAccess     ? p('authority:shellAccess', 'true') : null,
+        a.broadFilesystem ? p('authority:broadFilesystem', 'true') : null,
+        a.unpinnedSource  ? p('authority:unpinnedSource', 'true') : null,
+        a.dangerFlags     ? p('authority:dangerFlags', 'true') : null,
         meta.datasets?.length ? p('datasets', meta.datasets.join(', ')) : null,
         meta.architectures?.length ? p('architectures', meta.architectures.join(', ')) : null,
     ].filter(Boolean);

@@ -14,8 +14,13 @@
  *   - .env files               (scanned for MODEL_ID / provider env vars)
  */
 
-const fs   = require('fs');
-const path = require('path');
+const fs     = require('fs');
+const path   = require('path');
+const crypto = require('crypto');
+
+// Default ceiling for full-file weight hashing. Files above this are recorded
+// with size only (hashing a multi-GB checkpoint would dominate scan time).
+const DEFAULT_MAX_HASH_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
 
 const HF_CONFIG_SIGNALS = new Set([
     '_name_or_path', 'model_type', 'architectures',
@@ -179,7 +184,53 @@ function parseHFConfig(filePath) {
             architectures:       raw.architectures || [],
             transformersVersion: raw.transformers_version || null,
             torchDtype:          raw.torch_dtype   || null,
+            datasets:            raw.datasets      || [],
+            // Pillar 1: architecture & parameters
+            precision:           raw.torch_dtype || raw.quantization_config?.bits
+                                    ? (raw.torch_dtype || `${raw.quantization_config.bits}-bit`) : null,
+            quantization:        raw.quantization_config?.quant_method
+                                    || (raw.quantization_config ? 'quantized' : null),
+            hiddenSize:          raw.hidden_size  || null,
+            numLayers:           raw.num_hidden_layers || raw.n_layer || null,
+            numAttentionHeads:   raw.num_attention_heads || raw.n_head || null,
+            vocabSize:           raw.vocab_size   || null,
+            contextLength:       raw.max_position_embeddings || raw.n_positions || null,
+            paramCountEstimate:  estimateParams(raw),
         };
+    } catch { return null; }
+}
+
+// Rough parameter-count estimate from transformer config dimensions, when the
+// model card doesn't state it. Order-of-magnitude only; labeled as estimate.
+function estimateParams(cfg) {
+    const h = cfg.hidden_size, l = cfg.num_hidden_layers || cfg.n_layer, v = cfg.vocab_size;
+    if (!h || !l) return null;
+    // ~ embeddings + per-layer (attention 4·h² + MLP ~8·h²) ≈ 12·l·h² + 2·v·h
+    const est = 12 * l * h * h + 2 * (v || 0) * h;
+    return est > 0 ? est : null;
+}
+
+/**
+ * Compute the SHA-256 of a weight file by streaming it in chunks (memory-safe).
+ * Returns { alg, content, sizeBytes } or { skipped, sizeBytes } when over the cap.
+ *
+ * This is the integrity anchor for Pillar 1 — the exact hash that lets a verifier
+ * confirm the deployed weights are the ones the AI BOM was generated from.
+ */
+function hashWeightFile(filePath, maxBytes = DEFAULT_MAX_HASH_BYTES) {
+    let size;
+    try { size = fs.statSync(filePath).size; } catch { return null; }
+    if (size > maxBytes) return { skipped: true, reason: 'over-size-cap', sizeBytes: size };
+
+    try {
+        const fd  = fs.openSync(filePath, 'r');
+        const h   = crypto.createHash('sha256');
+        const buf = Buffer.allocUnsafe(1 << 20); // 1 MB chunks
+        let n;
+        try {
+            while ((n = fs.readSync(fd, buf, 0, buf.length, null)) > 0) h.update(buf.subarray(0, n));
+        } finally { fs.closeSync(fd); }
+        return { alg: 'SHA-256', content: h.digest('hex'), sizeBytes: size };
     } catch { return null; }
 }
 
@@ -265,6 +316,7 @@ module.exports = {
     detectAIArtifacts,
     parseHFConfig,
     parseGGUFHeader,
+    hashWeightFile,
     scanPythonFilesForModelIds,
     scanEnvFilesForModels,
     AI_PYTHON_PACKAGES,

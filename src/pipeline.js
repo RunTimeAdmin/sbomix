@@ -78,7 +78,9 @@ async function generateFromDirectory(dir, opts = {}) {
     if (runAIBOM) {
         try {
             const pypiComps = allComponents.filter((c) => c.ecosystem === 'pypi');
-            aiLocal = detectAILocal(dir, pypiComps);
+            // Weight hashing is local but I/O-heavy on large models — follow the
+            // same gate as enrichment so the server fast scan stays fast.
+            aiLocal = detectAILocal(dir, pypiComps, { hashWeights: runAIEnrich });
             allComponents.push(...aiLocal.components);
         } catch (e) {
             console.warn(`[packrai] AI BOM warning: ${e.message}`);
@@ -149,6 +151,7 @@ async function generateFromDirectory(dir, opts = {}) {
                 threats:        aiBOM.threats,
                 meta,
                 keys:           opts.signingKeys || null,
+                agentic:        aiBOM.agentic || null,
             });
             if (cyclonedx) attachToCycloneDX(cyclonedx, aiBomDocument);
         } catch (e) {

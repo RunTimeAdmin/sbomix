@@ -82,6 +82,30 @@ const CONTROLS = {
         expects: 'controls against model/data tampering and poisoning',
         evidence: 'threats.tampering',
     },
+    'EUAIACT:Art53.1a': {
+        regime: 'EU AI Act (Reg. 2024/1689)',
+        title:  'Article 53(1)(a) — GPAI technical documentation',
+        expects: 'documented model architecture, parameters, and design',
+        evidence: 'model.architecture',
+    },
+    'EUAIACT:Art53.1c': {
+        regime: 'EU AI Act (Reg. 2024/1689)',
+        title:  'Article 53(1)(c) — Copyright policy / lawful data use',
+        expects: 'dataset licensing and provenance recorded',
+        evidence: 'dataset.licensing',
+    },
+    'EUAIACT:Art53.1d': {
+        regime: 'EU AI Act (Reg. 2024/1689)',
+        title:  'Article 53(1)(d) — Training content summary',
+        expects: 'inventory of datasets used to train/fine-tune the model',
+        evidence: 'inventory.datasets',
+    },
+    'ISO42001:A.6.2.8': {
+        regime: 'ISO/IEC 42001:2023',
+        title:  'AI system operation and monitoring — agent authority scope',
+        expects: 'documented runtime scope of authority for autonomous agents (Least Agency)',
+        evidence: 'governance.agentic',
+    },
 };
 
 /**
@@ -95,12 +119,18 @@ const CONTROLS = {
  * @param {object}   ctx.signature    - JSF signature block (or null)
  * @returns {{ regimes: string[], controls: object[], summary: object }}
  */
-function assessCompliance({ aiComponents = [], threats = [], lineage = [], lineageVerify = null, signature = null }) {
+function assessCompliance({ aiComponents = [], threats = [], lineage = [], lineageVerify = null, signature = null, agentic = null }) {
     const hasStage   = (s) => lineage.some((r) => r.stage === s);
     const threatIds  = new Set(threats.map((t) => t.id));
     const thirdParty = aiComponents.filter((c) =>
         ['huggingface', 'api-provider'].includes(c.aiMetadata?.source) ||
         c.aiMetadata?.role === 'api-provider' || c.aiMetadata?.source === 'huggingface');
+
+    const datasets   = aiComponents.filter((c) => c.aiMetadata?.role === 'dataset');
+    const models     = aiComponents.filter((c) => c.aiMetadata?.role === 'model-weights');
+    const withArch   = models.filter((c) => c.aiMetadata?.architectures?.length || c.aiMetadata?.paramCountEstimate);
+    const datasetsLicensed = datasets.filter((c) => c.licenses?.length);
+    const mcpServers = aiComponents.filter((c) => c.aiMetadata?.role === 'mcp-server');
 
     // evidence key → { satisfied, detail }
     const evidence = {
@@ -113,6 +143,13 @@ function assessCompliance({ aiComponents = [], threats = [], lineage = [], linea
         'inventory.thirdParty': has(thirdParty.length > 0, `${thirdParty.length} third-party AI components inventoried`, 'no third-party AI components detected/inventoried'),
         'threats.supplyChain': has(threatIds.has('AI-004') || threatIds.has('AI-005'), 'supply-chain provenance risks assessed', 'supply-chain risk not assessed'),
         'threats.tampering':   has(threatIds.has('AI-001') || threatIds.has('AI-002') || threatIds.has('AI-003'), 'tampering/poisoning risks assessed', 'tampering risk not assessed'),
+        // Pillar 1/2/4 evidence
+        'model.architecture':  has(withArch.length > 0, `${withArch.length} model(s) with architecture/parameter detail`, 'no model architecture or parameter detail captured'),
+        'dataset.licensing':   has(datasets.length > 0 && datasetsLicensed.length === datasets.length, `${datasetsLicensed.length}/${datasets.length} datasets licensed`, 'dataset licensing/provenance not recorded'),
+        'inventory.datasets':  has(datasets.length > 0, `${datasets.length} training/fine-tuning dataset(s) inventoried`, 'no datasets inventoried'),
+        'governance.agentic':  has(mcpServers.length === 0 || agentic?.boundaries?.leastAgencyScore !== undefined && agentic?.boundaries?.leastAgencyScore !== null,
+            mcpServers.length === 0 ? 'no agentic tools — no excess authority' : `agent scope documented (Least Agency score ${agentic?.boundaries?.leastAgencyScore})`,
+            'agent runtime authority not documented'),
     };
 
     const controls = Object.entries(CONTROLS).map(([id, c]) => {

@@ -14,6 +14,10 @@
  *   AI-006  Restrictive model license              — MEDIUM
  *   AI-007  External AI API dependency             — LOW
  *   AI-008  Adversarial retraining risk            — HIGH
+ *   AI-009  Excessive agency (broad tool authority) — HIGH
+ *   AI-010  Unpinned MCP server source             — MEDIUM
+ *   AI-011  Unauthenticated tool/MCP server        — MEDIUM
+ *   AI-012  System-prompt tampering surface        — LOW
  */
 
 const path = require('path');
@@ -21,10 +25,12 @@ const {
     detectAIArtifacts,
     parseHFConfig,
     parseGGUFHeader,
+    hashWeightFile,
     scanPythonFilesForModelIds,
     scanEnvFilesForModels,
     AI_PYTHON_PACKAGES,
 } = require('./parsers/aimodel');
+const { detectAgenticContext } = require('./parsers/agentic');
 
 const HF_API_BASE = 'https://huggingface.co/api/models';
 
@@ -141,6 +147,56 @@ const THREATS = {
             'Apply differential privacy during fine-tuning (DP-SGD) to limit memorisation',
         ],
     },
+    EXCESSIVE_AGENCY: {
+        id: 'AI-009', severity: 'HIGH',
+        name: 'Excessive agency (broad tool authority)',
+        description:
+            'An agent/MCP configuration grants broad authority — shell execution, ' +
+            'unrestricted filesystem access, or danger flags that bypass confirmation. ' +
+            'This violates the Least Agency Principle (OWASP 2026): a compromised or ' +
+            'prompt-injected model inherits that authority directly.',
+        mitigations: [
+            'Scope filesystem MCP servers to a specific project directory, never / or ~',
+            'Remove shell/exec MCP servers from production agent configs',
+            'Drop --yolo / --dangerously-* flags; require human confirmation for write actions',
+            'Apply per-tool allowlists rather than blanket access',
+        ],
+    },
+    UNPINNED_MCP: {
+        id: 'AI-010', severity: 'MEDIUM',
+        name: 'Unpinned MCP server source',
+        description:
+            'An MCP server is launched via npx/uvx/pipx without a pinned version. The ' +
+            'tool code the agent executes can change between runs, with no review — a ' +
+            'supply-chain substitution risk equivalent to an unpinned dependency.',
+        mitigations: [
+            'Pin the MCP server package to an exact version (e.g. pkg@1.2.3)',
+            'Vendor approved MCP servers into a private registry',
+        ],
+    },
+    UNAUTH_MCP: {
+        id: 'AI-011', severity: 'MEDIUM',
+        name: 'Unauthenticated tool/MCP server',
+        description:
+            'An MCP server is configured without any authentication credential. If it ' +
+            'reaches a network resource or remote endpoint, access is unauthenticated.',
+        mitigations: [
+            'Require an API key / token for every networked MCP server',
+            'Restrict stdio servers to least-privilege local scope',
+        ],
+    },
+    PROMPT_TAMPERING: {
+        id: 'AI-012', severity: 'LOW',
+        name: 'System-prompt tampering surface',
+        description:
+            'System-instruction / agent-rule files define core model behaviour. They are ' +
+            'an unversioned behaviour-control surface: a silent edit changes what the ' +
+            'agent does without touching code or weights.',
+        mitigations: [
+            'Hash and version-control system prompts; record the hash in the AI BOM',
+            'Require review for changes to prompt/instruction files',
+        ],
+    },
 };
 
 // ── HuggingFace Hub metadata fetch ───────────────────────────────────────────
@@ -194,13 +250,66 @@ function makeHFComponent(modelId, config) {
             modelType:     config?.modelType     || null,
             architectures: config?.architectures || [],
             torchDtype:    config?.torchDtype    || null,
+            // Pillar 1: architecture & parameters
+            precision:     config?.precision     || config?.torchDtype || null,
+            quantization:  config?.quantization   || null,
+            paramCountEstimate: config?.paramCountEstimate || null,
+            contextLength: config?.contextLength || null,
         },
         modelCard: {
             modelParameters: {
                 architectureFamily: config?.architectures?.[0] || config?.modelType || null,
                 modelType: 'generative',
+                ...(config?.paramCountEstimate ? { parameterCountEstimate: config.paramCountEstimate } : {}),
+                ...(config?.contextLength ? { contextLength: config.contextLength } : {}),
             },
         },
+    };
+}
+
+// Pillar 2: training/fine-tuning datasets as first-class components with PURLs.
+function makeDatasetComponent(datasetId) {
+    const clean = String(datasetId).replace(/^\/+/, '');
+    const purl  = clean.includes('/')
+        ? `pkg:huggingface/dataset/${clean}@unknown`
+        : `pkg:generic/${encodeURIComponent(clean)}@unknown`;
+    return {
+        type: 'data', name: clean, version: 'unknown',
+        ecosystem: 'ai', purl, scope: 'required',
+        licenses: [], hashes: [], dependsOn: [], vulnerabilities: [],
+        aiMetadata: { role: 'dataset', source: 'huggingface' },
+    };
+}
+
+// Pillar 4: an MCP server the agent can call.
+function makeMCPComponent(server) {
+    const ver = (server.args.find(a => /@[\d]/.test(a)) || '').split('@').pop() || 'unpinned';
+    return {
+        type: 'application', name: `mcp:${server.name}`, version: ver,
+        ecosystem: 'ai',
+        purl: `pkg:generic/mcp/${encodeURIComponent(server.name)}@${ver}`,
+        scope: 'required', licenses: [], hashes: [], dependsOn: [], vulnerabilities: [],
+        aiMetadata: {
+            role:        'mcp-server',
+            transport:   server.transport,
+            command:     server.command,
+            requiresAuth: server.requiresAuth,
+            authority:   server.authority,
+            sourceFile:  server.sourceFile,
+        },
+    };
+}
+
+// Pillar 4: a system-prompt / agent-instruction file (behaviour surface).
+function makePromptComponent(prompt) {
+    return {
+        type: 'data', name: `prompt:${prompt.name}`, version: 'local',
+        ecosystem: 'ai',
+        purl: `pkg:generic/prompt/${encodeURIComponent(prompt.name)}@local`,
+        scope: 'required', licenses: [],
+        hashes: prompt.sha256 ? [{ alg: 'SHA-256', content: prompt.sha256 }] : [],
+        dependsOn: [], vulnerabilities: [],
+        aiMetadata: { role: 'prompt', localPath: prompt.path, sizeBytes: prompt.sizeBytes, snippet: prompt.snippet },
     };
 }
 
@@ -262,12 +371,13 @@ function makeAPIComponent(pkg) {
     };
 }
 
-function makeFrameworkComponent(label, role) {
+function makeFrameworkComponent(label, role, version) {
     const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const ver  = version || 'unknown';
     return {
-        type: 'machine-learning-model', name: label, version: 'unknown',
+        type: 'machine-learning-model', name: label, version: ver,
         ecosystem: 'ai',
-        purl: `pkg:generic/${slug}@unknown`,
+        purl: `pkg:generic/${slug}@${ver}`,
         scope: 'required', licenses: [], hashes: [], dependsOn: [], vulnerabilities: [],
         aiMetadata: { role, label },
         modelCard: { modelParameters: { modelType: 'framework' } },
@@ -324,13 +434,14 @@ function deduplicateThreats(threats) {
  * @param {object[]} pythonComponents - library components from parsers (ecosystem='pypi')
  * @returns {{ components, threats, enrichTargets, hasLocalWeights, hfModelComps, frameworkCount }}
  */
-function detectAILocal(dir, pythonComponents = []) {
+function detectAILocal(dir, pythonComponents = [], opts = {}) {
+    const hashWeights = opts.hashWeights !== false;   // Pillar 1 integrity hashing (default on)
     const components = [];
     const threats    = [];
 
     // ── 1. Classify Python dependencies ──────────────────────────────────────
     const apiPackages    = [];
-    const frameworksSeen = new Map(); // label → meta (dedup torch + torchvision → one PyTorch)
+    const frameworksSeen = new Map(); // label → { meta, version } (dedup torch + torchvision → one PyTorch)
 
     for (const comp of pythonComponents) {
         const meta = AI_PYTHON_PACKAGES[comp.name.toLowerCase()];
@@ -338,7 +449,7 @@ function detectAILocal(dir, pythonComponents = []) {
         if (meta.role === 'api-sdk') {
             apiPackages.push({ ...meta, name: comp.name, version: comp.version });
         } else if (!frameworksSeen.has(meta.label)) {
-            frameworksSeen.set(meta.label, meta);
+            frameworksSeen.set(meta.label, { meta, version: comp.version });   // Pillar 3: capture version
         }
     }
 
@@ -350,20 +461,33 @@ function detectAILocal(dir, pythonComponents = []) {
 
     // ── 3. AI framework / tooling components ─────────────────────────────────
     const frameworkComponents = [];
-    for (const [label, meta] of frameworksSeen) {
-        frameworkComponents.push(makeFrameworkComponent(label, meta.role));
+    for (const [label, { meta, version }] of frameworksSeen) {
+        frameworkComponents.push(makeFrameworkComponent(label, meta.role, version));
     }
 
     // ── 4. Scan directory for model artifacts (single filesystem walk) ────────
     const artifacts = detectAIArtifacts(dir);
 
-    // 4a. HF config.json → local model weights
+    // 4a. HF config.json → local model weights (+ SHA-256 of co-located weights)
     const hfDirs = new Map(); // modelDir → { config, comp }
     for (const { path: cfgPath, dir: modelDir } of artifacts.hfConfigs) {
         if (hfDirs.has(modelDir)) continue;
         const config = parseHFConfig(cfgPath);
         if (!config) continue;
         const comp = makeHFComponent(config.modelId, config);
+        // Pillar 1: hash weight files sitting in this model directory
+        if (hashWeights) {
+            const weightFile = artifacts.safetensors.concat(artifacts.pytorchBins)
+                .find(w => path.dirname(w.path) === modelDir);
+            if (weightFile) {
+                const wh = hashWeightFile(weightFile.path);
+                if (wh?.content) {
+                    comp.hashes.push({ alg: wh.alg, content: wh.content });
+                    comp.aiMetadata.weightFile = path.basename(weightFile.path);
+                    comp.aiMetadata.weightSizeBytes = wh.sizeBytes;
+                }
+            }
+        }
         hfDirs.set(modelDir, { config, comp });
         components.push(comp);
     }
@@ -387,21 +511,30 @@ function detectAILocal(dir, pythonComponents = []) {
         threats.push(threat(THREATS.COMPROMISED_PRETRAINED, ref.modelId));
     }
 
-    // 4c. Standalone GGUF files (dirs without an HF config)
+    // 4c. Standalone GGUF files (dirs without an HF config) — hash for integrity
     for (const { path: fp } of artifacts.ggufFiles) {
         if (hfDirs.has(path.dirname(fp))) continue;
         const header = parseGGUFHeader(fp);
         const comp   = makeGGUFComponent(fp, header);
+        if (hashWeights) {
+            const wh = hashWeightFile(fp);
+            if (wh?.content) comp.hashes.push({ alg: wh.alg, content: wh.content });
+        }
         components.push(comp);
-        threats.push(threat(THREATS.UNVERIFIED_WEIGHTS, comp.name));
+        // GGUF with a verified hash is no longer "unverified"
+        if (!comp.hashes.length) threats.push(threat(THREATS.UNVERIFIED_WEIGHTS, comp.name));
     }
 
     // 4d. Standalone ONNX files
     for (const { path: fp } of artifacts.onnxFiles) {
         if (hfDirs.has(path.dirname(fp))) continue;
         const comp = makeONNXComponent(fp);
+        if (hashWeights) {
+            const wh = hashWeightFile(fp);
+            if (wh?.content) comp.hashes.push({ alg: wh.alg, content: wh.content });
+        }
         components.push(comp);
-        threats.push(threat(THREATS.UNVERIFIED_WEIGHTS, comp.name));
+        if (!comp.hashes.length) threats.push(threat(THREATS.UNVERIFIED_WEIGHTS, comp.name));
     }
 
     // 4e. PyTorch pickle files → CRITICAL threat regardless of dir
@@ -416,6 +549,35 @@ function detectAILocal(dir, pythonComponents = []) {
         threats.push(threat(THREATS.DATA_POISONING,       'fine-tuning pipeline'));
         threats.push(threat(THREATS.ADVERSARIAL_RETRAIN,  'fine-tuning pipeline'));
     }
+
+    // ── 4g. Agentic & operational context (Pillar 4) ─────────────────────────
+    const agentic = detectAgenticContext(dir);
+    for (const server of agentic.mcpServers) {
+        components.push(makeMCPComponent(server));
+        const a = server.authority;
+        if (a.shellAccess || a.broadFilesystem || a.dangerFlags) {
+            threats.push(threat(THREATS.EXCESSIVE_AGENCY, `mcp:${server.name}`));
+        }
+        if (a.unpinnedSource) threats.push(threat(THREATS.UNPINNED_MCP, `mcp:${server.name}`));
+        if (!server.requiresAuth && server.transport !== 'stdio') {
+            threats.push(threat(THREATS.UNAUTH_MCP, `mcp:${server.name}`));
+        }
+    }
+    for (const prompt of agentic.prompts) {
+        components.push(makePromptComponent(prompt));
+        threats.push(threat(THREATS.PROMPT_TAMPERING, `prompt:${prompt.name}`));
+    }
+
+    // ── 4h. Dataset components with PURLs (Pillar 2) ─────────────────────────
+    // Datasets referenced directly in HF configs (cardData arrives via enrichment).
+    const datasetComps = [];
+    const seenDatasets = new Set();
+    for (const { config } of hfDirs.values()) {
+        for (const ds of (config.datasets || [])) {
+            if (!seenDatasets.has(ds)) { seenDatasets.add(ds); datasetComps.push(makeDatasetComponent(ds)); }
+        }
+    }
+    components.push(...datasetComps);
 
     const allComponents = [...components, ...frameworkComponents];
 
@@ -434,6 +596,7 @@ function detectAILocal(dir, pythonComponents = []) {
         hasLocalWeights: artifacts.safetensors.length > 0 || artifacts.pytorchBins.length > 0,
         hfModelComps:    [...hfDirs.values()].map(({ comp }) => comp),
         frameworkCount:  frameworkComponents.length,
+        agentic,
     };
 }
 
@@ -477,15 +640,21 @@ function finalizeAIResult(local) {
 
     const threats       = deduplicateThreats(local.threats);
     const allComponents = local.components;
+    const byRole = (r) => allComponents.filter(c => c.aiMetadata?.role === r).length;
 
     return {
         components: allComponents,
         threats,
+        agentic: local.agentic || { mcpServers: [], prompts: [], boundaries: {} },
         stats: {
             aiModels:        allComponents.filter(c =>
-                c.aiMetadata?.role === 'model-weights' || c.aiMetadata?.role === 'code-reference').length,
-            apiProviders:    allComponents.filter(c => c.aiMetadata?.role === 'api-provider').length,
+                ['model-weights', 'code-reference'].includes(c.aiMetadata?.role)).length,
+            apiProviders:    byRole('api-provider'),
             frameworks:      local.frameworkCount,
+            datasets:        byRole('dataset'),
+            mcpServers:      byRole('mcp-server'),
+            prompts:         byRole('prompt'),
+            leastAgencyScore: local.agentic?.boundaries?.leastAgencyScore ?? null,
             aiThreats:       threats.length,
             criticalThreats: threats.filter(t => t.severity === 'CRITICAL').length,
             highThreats:     threats.filter(t => t.severity === 'HIGH').length,
@@ -500,11 +669,11 @@ function finalizeAIResult(local) {
  *
  * @param {string}   dir              - project root directory
  * @param {object[]} pythonComponents - library components from parsers (ecosystem='pypi')
- * @param {object}   [opts]           - { enrich=true, timeout }
+ * @param {object}   [opts]           - { enrich=true, hashWeights=true, timeout }
  * @returns {Promise<{ components, threats, stats }>}
  */
 async function detectAIComponents(dir, pythonComponents = [], opts = {}) {
-    const local = detectAILocal(dir, pythonComponents);
+    const local = detectAILocal(dir, pythonComponents, opts);
     if (opts.enrich !== false) {
         const { threats } = await enrichAIComponents(local.enrichTargets, opts);
         local.threats.push(...threats);
