@@ -135,27 +135,37 @@ test('CycloneDX output includes a completeness composition', () => {
 
 // ── CycloneDX 1.7 ML-BOM structure ────────────────────────────────────────────
 
-test('generator emits CycloneDX 1.7 with metadata bom-ref and tool author', () => {
+test('generator defaults to CycloneDX 1.6, with 1.7 as explicit opt-in', () => {
     const res = finalizeAIResult(detectAILocal(root, [{ name: 'torch', version: '2.4.1' }]));
-    const cdx = generateCycloneDX(res.components, { name: 'My-Agent-App', version: '2.1.0' });
-    assert.strictEqual(cdx.specVersion, '1.7');
-    assert.strictEqual(cdx.metadata.component['bom-ref'], 'app-my-agent-app');
-    assert.strictEqual(cdx.metadata.tools.components[0].author, 'packrai.xyz');
+    const def = generateCycloneDX(res.components, { name: 'My-Agent-App', version: '2.1.0' });
+    assert.strictEqual(def.specVersion, '1.6');                       // safe default
+    assert.ok(def['$schema'].includes('bom-1.6.schema.json'));
+    assert.strictEqual(def.metadata.component['bom-ref'], 'app-my-agent-app');
+    assert.strictEqual(def.metadata.tools.components[0].author, 'packrai.xyz');
+
+    const optIn = generateCycloneDX(res.components, { name: 'app', version: '1.0', specVersion: '1.7' });
+    assert.strictEqual(optIn.specVersion, '1.7');
+    assert.ok(optIn['$schema'].includes('bom-1.7.schema.json'));
 });
 
-test('model component gets a rich 1.7 modelCard (derived fields only)', () => {
+test('model component gets a rich modelCard; datasets linked by bom-ref', () => {
     const res = finalizeAIResult(detectAILocal(root, []));
     const cdx = generateCycloneDX(res.components, { name: 'app', version: '1.0' });
     const model = cdx.components.find(c => c.type === 'machine-learning-model' && c.modelCard?.modelParameters?.architectureFamily);
     const mp = model.modelCard.modelParameters;
     assert.strictEqual(mp.architectureFamily, 'Transformer');
     assert.strictEqual(mp.modelArchitecture, 'Decoder-only LLM');   // LlamaForCausalLM
-    assert.ok(Array.isArray(mp.datasets) && mp.datasets[0].type === 'dataset');
-    assert.ok(mp.datasets.some(d => d.contents?.url?.includes('huggingface.co/datasets/')));
+    // modelCard references datasets by bom-ref only (no buried metadata)
+    assert.ok(Array.isArray(mp.datasets) && mp.datasets[0]['bom-ref']);
+    assert.ok(!mp.datasets[0].contents, 'detail lives on the standalone component, not the card');
+    // The bom-ref resolves to a standalone type:"data" component in the flat array
+    const ref = mp.datasets[0]['bom-ref'];
+    const standalone = cdx.components.find(c => c['bom-ref'] === ref);
+    assert.strictEqual(standalone.type, 'data');
+    assert.ok(standalone.data[0].contents.url.includes('huggingface.co/datasets/'));
     // Context-window limitation is derived (factual), never a fabricated metric
     assert.ok(model.modelCard.considerations.technicalLimitations
         .some(l => /Context window limited to 8192 tokens/.test(l)));
-    // No fabricated benchmark numbers
     assert.strictEqual(model.modelCard.quantitativeAnalysis, undefined);
 });
 
@@ -198,16 +208,25 @@ test('metricsFromModelIndex maps provider-reported benchmarks', () => {
 
 // ── modelCard governance + provider passthrough ───────────────────────────────
 
-test('embedded datasets carry governance.owners derived from the namespace', () => {
-    const comp = {
+test('standalone dataset component carries governance derived from the namespace', () => {
+    const model = {
         type: 'machine-learning-model', name: 'm', version: '1', ecosystem: 'ai',
         purl: 'pkg:huggingface/org/m@1', licenses: [], hashes: [],
         aiMetadata: { role: 'model-weights', datasets: ['allenai/c4'] }, modelCard: {},
     };
-    const cdx = generateCycloneDX([comp], { name: 'app', version: '1.0' });
-    const ds = cdx.components[0].modelCard.modelParameters.datasets[0];
-    assert.strictEqual(ds.contents.url, 'https://huggingface.co/datasets/allenai/c4');
-    assert.strictEqual(ds.governance.owners[0].contact.name, 'allenai');
+    const dataset = {
+        type: 'data', name: 'allenai/c4', version: 'unknown', ecosystem: 'ai',
+        purl: 'pkg:huggingface/dataset/allenai/c4@unknown', licenses: [], hashes: [],
+        aiMetadata: { role: 'dataset', source: 'huggingface' },
+    };
+    const cdx = generateCycloneDX([model, dataset], { name: 'app', version: '1.0' });
+    // modelCard references by bom-ref; governance lives on the standalone data component
+    const ref = cdx.components.find(c => c.type === 'machine-learning-model')
+        .modelCard.modelParameters.datasets[0]['bom-ref'];
+    assert.strictEqual(ref, 'pkg:huggingface/dataset/allenai/c4@unknown');
+    const ds = cdx.components.find(c => c['bom-ref'] === ref);
+    assert.strictEqual(ds.data[0].contents.url, 'https://huggingface.co/datasets/allenai/c4');
+    assert.strictEqual(ds.data[0].governance.owners[0].contact.name, 'allenai');
 });
 
 test('provider metrics and considerations pass through but are never fabricated', () => {

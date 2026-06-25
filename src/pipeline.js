@@ -105,15 +105,24 @@ async function generateFromDirectory(dir, opts = {}) {
     //    AI library components skip OSV/license (they're models, not packages).
     const libCompsForEnrich = allComponents.filter((c) => c.ecosystem !== 'ai' && c.ecosystem !== 'container');
     const baseVulnMap = new Map();
-    await Promise.all([
+    const [, , , aiEnrich] = await Promise.all([
         runLicenses && libCompsForEnrich.length > 0 ? enrichWithLicenses(libCompsForEnrich) : null,
         runVulns    && libCompsForEnrich.length > 0 ? enrichWithOSV(libCompsForEnrich)      : null,
         runDocker   ? fetchAllBaseVulns(dockerfileAudit, baseVulnMap)                        : null,
         (runAIBOM && runAIEnrich && aiLocal) ? enrichAIComponents(aiLocal.enrichTargets) : null,
     ]);
 
-    // 3a. Finalize AI BOM result after enrichment (recomputes threat counts)
-    if (aiLocal) aiBOM = finalizeAIResult(aiLocal);
+    // 3a. Merge enrichment results (threats + Hub-discovered dataset components)
+    //     into the local result, then finalize. Threats from enrichment
+    //     (NO_PROVENANCE, RESTRICTED_LICENSE) must not be dropped.
+    if (aiLocal) {
+        if (aiEnrich?.threats?.length)    aiLocal.threats.push(...aiEnrich.threats);
+        if (aiEnrich?.components?.length) {
+            aiLocal.components.push(...aiEnrich.components);
+            allComponents.push(...aiEnrich.components);
+        }
+        aiBOM = finalizeAIResult(aiLocal);
+    }
 
     // 3b. Add container base images after enrichment — keeps them out of OSV/license
     //     lookups and the quality score calculation.

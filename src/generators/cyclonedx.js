@@ -11,19 +11,23 @@
 
 const crypto = require('crypto');
 
-const CDX_SPEC_VERSION = '1.7';
-const CDX_SCHEMA = 'http://cyclonedx.org/schema/bom-1.7.schema.json';
+// Default to 1.6 for downstream ingestion safety — 1.6 already carries the full
+// ML-BOM (modelCard) capability. 1.7 is an explicit opt-in via meta.specVersion.
+const DEFAULT_SPEC_VERSION = '1.6';
+const SCHEMA_URL = (v) => `http://cyclonedx.org/schema/bom-${v}.schema.json`;
 
 /**
- * Generate a CycloneDX 1.7 (ECMA-424) BOM.
+ * Generate a CycloneDX ML-BOM.
  * @param {object[]} components  - from parsers
  * @param {object} meta
  * @param {string} meta.name     - component/repo being described
  * @param {string} meta.version  - version / tag
  * @param {string} [meta.author] - author name or org
+ * @param {string} [meta.specVersion] - '1.6' (default) or '1.7'
  * @returns {object} parsed JSON object (call JSON.stringify to serialise)
  */
 function generateCycloneDX(components, meta = {}) {
+    const specVersion = SUPPORTED_SPEC_VERSIONS.has(meta.specVersion) ? meta.specVersion : DEFAULT_SPEC_VERSION;
     const serialNumber = `urn:uuid:${randomUUID()}`;
     const timestamp = new Date().toISOString();
 
@@ -31,9 +35,9 @@ function generateCycloneDX(components, meta = {}) {
     const deduped = deduplicateComponents(components);
 
     const bom = {
-        '$schema': CDX_SCHEMA,
+        '$schema': SCHEMA_URL(specVersion),
         bomFormat: 'CycloneDX',
-        specVersion: CDX_SPEC_VERSION,
+        specVersion,
         serialNumber,
         version: 1,
         metadata: buildMetadata(meta, timestamp),
@@ -130,11 +134,14 @@ function cdxComponent(comp) {
         c.scope = comp.scope === 'dev' ? 'excluded' : 'optional';
     }
 
-    // CycloneDX 1.7 AI/ML extensions — modelCard for models, properties for any
-    // AI component (datasets, MCP servers, prompts carry aiMetadata too).
+    // CycloneDX AI/ML extensions — modelCard for models, data block for datasets,
+    // properties for any AI component (MCP servers, prompts carry aiMetadata too).
     if (comp.type === 'machine-learning-model') {
         const card = buildModelCard(comp);
         if (card) c.modelCard = card;
+    }
+    if (comp.type === 'data' && comp.aiMetadata?.role === 'dataset') {
+        c.data = [buildDatasetData(comp)];
     }
     if (comp.ecosystem === 'ai') {
         const props = buildAIProperties(comp.aiMetadata || {});
@@ -195,18 +202,13 @@ function buildModelCard(comp) {
     const arch = deriveModelArchitecture(m.architectures);
     if (arch) modelParameters.modelArchitecture = arch;
 
-    // Datasets embedded with governance (Pillar 2), matching the 1.7 shape.
-    const datasets = (m.datasets || []).map((ds) => {
-        const id = typeof ds === 'string' ? ds : ds.name;
-        const entry = { type: 'dataset', name: id };
-        if (typeof id === 'string' && id.includes('/')) {
-            entry.contents = { url: `https://huggingface.co/datasets/${id}` };
-            // Governance owner derived from the dataset namespace (the publishing org).
-            // No email is asserted — only what the identifier actually proves.
-            entry.governance = { owners: [{ contact: { name: id.split('/')[0] } }] };
-        }
-        return entry;
-    });
+    // Datasets are declared as standalone type:"data" components in the flat
+    // components array; the modelCard references them by matching bom-ref so a
+    // scanner finds them at the top level (no duplicated metadata). Pillar 2.
+    const datasets = (m.datasets || [])
+        .map((ds) => (typeof ds === 'string' ? ds : ds?.name))
+        .filter(Boolean)
+        .map((id) => ({ 'bom-ref': datasetBomRef(id) }));
     if (datasets.length) modelParameters.datasets = datasets;
 
     // inputs/outputs are determinable for text tasks
@@ -237,6 +239,29 @@ function buildModelCard(comp) {
 
 function slugify(s) {
     return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+// Deterministic bom-ref / PURL for a dataset id. MUST match the standalone
+// dataset component's purl (set by aibom.makeDatasetComponent) so the modelCard
+// reference resolves to the flat-array component.
+function datasetBomRef(id) {
+    const clean = String(id).replace(/^\/+/, '');
+    return clean.includes('/')
+        ? `pkg:huggingface/dataset/${clean}@unknown`
+        : `pkg:generic/${encodeURIComponent(clean)}@unknown`;
+}
+
+// Rich componentData (contents + governance) for a standalone type:"data"
+// dataset component. The detail lives here once; the modelCard only links to it.
+function buildDatasetData(comp) {
+    const id = comp.name;
+    const entry = { type: 'dataset', name: id };
+    const url = comp.aiMetadata?.datasetUrl
+        || (id.includes('/') ? `https://huggingface.co/datasets/${id}` : null);
+    if (url) entry.contents = { url };
+    const owner = comp.aiMetadata?.datasetOwner || (id.includes('/') ? id.split('/')[0] : null);
+    if (owner) entry.governance = { owners: [{ contact: { name: owner } }] };
+    return entry;
 }
 
 function buildAIProperties(meta) {

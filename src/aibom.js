@@ -453,6 +453,18 @@ function deduplicateThreats(threats) {
     });
 }
 
+// Collapse components sharing a purl (e.g. a dataset found both in a local model
+// config and reported by the Hub). First occurrence wins.
+function dedupeByPurl(components) {
+    const seen = new Set();
+    return components.filter((c) => {
+        if (!c.purl) return true;
+        if (seen.has(c.purl)) return false;
+        seen.add(c.purl);
+        return true;
+    });
+}
+
 // ── Local detection (synchronous, filesystem-only, NO network) ────────────────
 //
 // This is the hot path — it mirrors lock-file parsing: pure local work that
@@ -643,7 +655,8 @@ function detectAILocal(dir, pythonComponents = [], opts = {}) {
  * @returns {Promise<{ threats: object[] }>}
  */
 async function enrichAIComponents(enrichTargets = [], opts = {}) {
-    const extraThreats = [];
+    const extraThreats    = [];
+    const extraComponents = [];   // standalone dataset components discovered via Hub
     await Promise.all(enrichTargets.map(async ({ modelId, comp }) => {
         // Hub metadata + README model card fetched in parallel
         const [meta, considerations] = await Promise.all([
@@ -658,6 +671,12 @@ async function enrichAIComponents(enrichTargets = [], opts = {}) {
                 extraThreats.push(threat(THREATS.RESTRICTED_LICENSE, comp.name,
                     { description: `${THREATS.RESTRICTED_LICENSE.description} (${meta.license})` }));
             }
+            // Datasets reported by the Hub become standalone components (deduped
+            // by purl in finalize) so the modelCard's bom-ref reference resolves.
+            for (const ds of (meta.datasets || [])) {
+                const id = typeof ds === 'string' ? ds : ds?.name;
+                if (id) extraComponents.push(makeDatasetComponent(id));
+            }
         }
         // Provider-authored considerations (use cases, limitations, ethics)
         if (considerations?.considerations) {
@@ -667,7 +686,7 @@ async function enrichAIComponents(enrichTargets = [], opts = {}) {
             };
         }
     }));
-    return { threats: extraThreats };
+    return { threats: extraThreats, components: extraComponents };
 }
 
 // Assemble the final result from a local detection + (optional) enrichment.
@@ -681,7 +700,7 @@ function finalizeAIResult(local) {
     }
 
     const threats       = deduplicateThreats(local.threats);
-    const allComponents = local.components;
+    const allComponents = dedupeByPurl(local.components);
     const byRole = (r) => allComponents.filter(c => c.aiMetadata?.role === r).length;
 
     return {
@@ -717,8 +736,9 @@ function finalizeAIResult(local) {
 async function detectAIComponents(dir, pythonComponents = [], opts = {}) {
     const local = detectAILocal(dir, pythonComponents, opts);
     if (opts.enrich !== false) {
-        const { threats } = await enrichAIComponents(local.enrichTargets, opts);
+        const { threats, components } = await enrichAIComponents(local.enrichTargets, opts);
         local.threats.push(...threats);
+        if (components?.length) local.components.push(...components);
     }
     return finalizeAIResult(local);
 }
