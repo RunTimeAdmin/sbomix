@@ -255,6 +255,8 @@ function makeHFComponent(modelId, config) {
             quantization:  config?.quantization   || null,
             paramCountEstimate: config?.paramCountEstimate || null,
             contextLength: config?.contextLength || null,
+            // Pillar 2: datasets declared in the model config (embedded in modelCard)
+            datasets:      config?.datasets      || [],
         },
         modelCard: {
             modelParameters: {

@@ -132,6 +132,41 @@ test('CycloneDX output includes a completeness composition', () => {
     assert.ok(cdx.compositions.some(c => c.aggregate === 'incomplete')); // AI components
 });
 
+// ── CycloneDX 1.7 ML-BOM structure ────────────────────────────────────────────
+
+test('generator emits CycloneDX 1.7 with metadata bom-ref and tool author', () => {
+    const res = finalizeAIResult(detectAILocal(root, [{ name: 'torch', version: '2.4.1' }]));
+    const cdx = generateCycloneDX(res.components, { name: 'My-Agent-App', version: '2.1.0' });
+    assert.strictEqual(cdx.specVersion, '1.7');
+    assert.strictEqual(cdx.metadata.component['bom-ref'], 'app-my-agent-app');
+    assert.strictEqual(cdx.metadata.tools.components[0].author, 'packrai.xyz');
+});
+
+test('model component gets a rich 1.7 modelCard (derived fields only)', () => {
+    const res = finalizeAIResult(detectAILocal(root, []));
+    const cdx = generateCycloneDX(res.components, { name: 'app', version: '1.0' });
+    const model = cdx.components.find(c => c.type === 'machine-learning-model' && c.modelCard?.modelParameters?.architectureFamily);
+    const mp = model.modelCard.modelParameters;
+    assert.strictEqual(mp.architectureFamily, 'Transformer');
+    assert.strictEqual(mp.modelArchitecture, 'Decoder-only LLM');   // LlamaForCausalLM
+    assert.ok(Array.isArray(mp.datasets) && mp.datasets[0].type === 'dataset');
+    assert.ok(mp.datasets.some(d => d.contents?.url?.includes('huggingface.co/datasets/')));
+    // Context-window limitation is derived (factual), never a fabricated metric
+    assert.ok(model.modelCard.considerations.technicalLimitations
+        .some(l => /Context window limited to 8192 tokens/.test(l)));
+    // No fabricated benchmark numbers
+    assert.strictEqual(model.modelCard.quantitativeAnalysis, undefined);
+});
+
+test('MCP component carries a standard agentic:authority property', () => {
+    const res = finalizeAIResult(detectAILocal(root, []));
+    const cdx = generateCycloneDX(res.components, { name: 'app', version: '1.0' });
+    const shell = cdx.components.find(c => c.name === 'mcp:shell');
+    const authority = shell.properties.find(p => p.name === 'agentic:authority');
+    assert.strictEqual(authority.value, 'shell-execution');
+    assert.ok(shell.properties.some(p => p.name === 'runtime:fencing:shellExecution'));
+});
+
 test('assessCompliance maps EU AI Act Article 53 controls', () => {
     const res = finalizeAIResult(detectAILocal(root, []));
     const out = assessCompliance({

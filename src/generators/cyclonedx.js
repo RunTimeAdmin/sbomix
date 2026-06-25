@@ -11,11 +11,11 @@
 
 const crypto = require('crypto');
 
-const CDX_SPEC_VERSION = '1.6';
-const CDX_SCHEMA = 'http://cyclonedx.org/schema/bom-1.6.schema.json';
+const CDX_SPEC_VERSION = '1.7';
+const CDX_SCHEMA = 'http://cyclonedx.org/schema/bom-1.7.schema.json';
 
 /**
- * Generate a CycloneDX 1.6 BOM.
+ * Generate a CycloneDX 1.7 (ECMA-424) BOM.
  * @param {object[]} components  - from parsers
  * @param {object} meta
  * @param {string} meta.name     - component/repo being described
@@ -84,6 +84,7 @@ function buildMetadata(meta, timestamp) {
         tools: {
             components: [{
                 type: 'application',
+                author: 'packrai.xyz',
                 name: 'packrai',
                 version: require('../../package.json').version,
                 purl: 'pkg:npm/packrai',
@@ -94,6 +95,7 @@ function buildMetadata(meta, timestamp) {
             }],
         },
         component: meta.name ? {
+            'bom-ref': `app-${slugify(meta.name)}`,
             type: 'application',
             name: meta.name,
             version: meta.version || '',
@@ -128,10 +130,11 @@ function cdxComponent(comp) {
         c.scope = comp.scope === 'dev' ? 'excluded' : 'optional';
     }
 
-    // CycloneDX 1.6 AI/ML extensions — modelCard for models, properties for any
+    // CycloneDX 1.7 AI/ML extensions — modelCard for models, properties for any
     // AI component (datasets, MCP servers, prompts carry aiMetadata too).
-    if (comp.type === 'machine-learning-model' && comp.modelCard) {
-        c.modelCard = comp.modelCard;
+    if (comp.type === 'machine-learning-model') {
+        const card = buildModelCard(comp);
+        if (card) c.modelCard = card;
     }
     if (comp.ecosystem === 'ai') {
         const props = buildAIProperties(comp.aiMetadata || {});
@@ -141,12 +144,114 @@ function cdxComponent(comp) {
     return c;
 }
 
+// Map a model architecture class to a CycloneDX modelArchitecture descriptor.
+// Only well-known suffixes are mapped — anything else is left unset rather than
+// guessed, so the field is trustworthy.
+function deriveModelArchitecture(architectures = []) {
+    const a = (architectures[0] || '').toLowerCase();
+    if (/forcausallm$/.test(a))           return 'Decoder-only LLM';
+    if (/formaskedlm$/.test(a))           return 'Encoder-only (masked LM)';
+    if (/forconditionalgeneration$/.test(a)) return 'Encoder-decoder (seq2seq)';
+    if (/forsequenceclassification$/.test(a)) return 'Encoder classifier';
+    if (/(clip|vit|imageclassification)/.test(a)) return 'Vision transformer';
+    return null;
+}
+
+// Task tag → human-readable task label, matching the modelCard convention.
+const TASK_LABELS = {
+    'text-generation': 'Text Generation', 'text2text-generation': 'Text-to-Text Generation',
+    'fill-mask': 'Masked Language Modeling', 'text-classification': 'Text Classification',
+    'token-classification': 'Token Classification', 'question-answering': 'Question Answering',
+    'summarization': 'Summarization', 'translation': 'Translation',
+    'feature-extraction': 'Feature Extraction / Embeddings', 'sentence-similarity': 'Sentence Similarity',
+    'image-classification': 'Image Classification', 'automatic-speech-recognition': 'Speech Recognition',
+};
+
+const TEXT_TASKS = new Set(['text-generation', 'text2text-generation', 'summarization',
+    'translation', 'question-answering', 'fill-mask', 'text-classification']);
+
+/**
+ * Build a CycloneDX 1.7 modelCard from a component's detected metadata.
+ *
+ * Populates only what a static scan (plus HF Hub enrichment) can establish.
+ * Fields that require benchmarking or human judgement — performanceMetrics,
+ * ethicalConsiderations, useCases, performanceTradeoffs — are emitted ONLY when
+ * present in the component (e.g. carried from an HF model card); they are never
+ * fabricated.
+ */
+function buildModelCard(comp) {
+    const m = comp.aiMetadata || {};
+    const existing = comp.modelCard || {};
+    const task = m.pipeline || existing.modelParameters?.task || null;
+
+    const modelParameters = {};
+    if (m.approach || existing.modelParameters?.approach) {
+        modelParameters.approach = m.approach || existing.modelParameters.approach;
+    }
+    if (task) modelParameters.task = TASK_LABELS[task] || task;
+    const family = m.architectureFamily
+        || (m.architectures?.length || m.modelType ? 'Transformer' : null);
+    if (family) modelParameters.architectureFamily = family;
+    const arch = deriveModelArchitecture(m.architectures);
+    if (arch) modelParameters.modelArchitecture = arch;
+
+    // Datasets embedded with governance (Pillar 2), matching the 1.7 shape.
+    const datasets = (m.datasets || []).map((ds) => {
+        const id = typeof ds === 'string' ? ds : ds.name;
+        const entry = { type: 'dataset', name: id };
+        if (typeof id === 'string' && id.includes('/')) {
+            entry.contents = { url: `https://huggingface.co/datasets/${id}` };
+        }
+        return entry;
+    });
+    if (datasets.length) modelParameters.datasets = datasets;
+
+    // inputs/outputs are determinable for text tasks
+    if (task && TEXT_TASKS.has(task)) {
+        modelParameters.inputs  = [{ format: 'string', description: 'Input text' }];
+        modelParameters.outputs = [{ format: 'string', description: 'Generated text' }];
+    }
+
+    const card = {};
+    if (Object.keys(modelParameters).length) card.modelParameters = modelParameters;
+
+    // quantitativeAnalysis — only if metrics were carried in (never invented)
+    if (existing.quantitativeAnalysis?.performanceMetrics?.length) {
+        card.quantitativeAnalysis = existing.quantitativeAnalysis;
+    }
+
+    // considerations — derive the context-window limitation (factual); pass through
+    // anything supplied by an HF model card.
+    const considerations = { ...(existing.considerations || {}) };
+    const limitations = [...(considerations.technicalLimitations || [])];
+    if (m.contextLength) limitations.push(`Context window limited to ${m.contextLength} tokens`);
+    if (m.quantization)  limitations.push(`Quantized (${m.quantization}) — may reduce accuracy vs full precision`);
+    if (limitations.length) considerations.technicalLimitations = limitations;
+    if (Object.keys(considerations).length) card.considerations = considerations;
+
+    return Object.keys(card).length ? card : null;
+}
+
+function slugify(s) {
+    return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
 function buildAIProperties(meta) {
     const p = (name, value) =>
         (value !== null && value !== undefined && value !== '')
             ? { name: `packrai:ai:${name}`, value: String(value) }
             : null;
     const a = meta.authority || {};
+    // Standard-namespace property (no packrai prefix) — matches the agentic /
+    // runtime:fencing convention used by the CycloneDX 1.7 ML-BOM ecosystem.
+    const std = (name, value) =>
+        (value !== null && value !== undefined && value !== '')
+            ? { name, value: String(value) }
+            : null;
+
+    const datasetNames = (meta.datasets || [])
+        .map((d) => (typeof d === 'string' ? d : d?.name)).filter(Boolean);
+
     return [
         p('role',          meta.role),
         p('source',        meta.source),
@@ -166,17 +271,28 @@ function buildAIProperties(meta) {
         p('paramCountEstimate', meta.paramCountEstimate),
         p('contextLength', meta.contextLength),
         p('weightFile',    meta.weightFile),
-        // Pillar 4: agentic context
-        p('transport',     meta.transport),
-        p('command',       meta.command),
-        p('requiresAuth',  meta.requiresAuth === undefined ? null : String(meta.requiresAuth)),
-        a.shellAccess     ? p('authority:shellAccess', 'true') : null,
-        a.broadFilesystem ? p('authority:broadFilesystem', 'true') : null,
-        a.unpinnedSource  ? p('authority:unpinnedSource', 'true') : null,
-        a.dangerFlags     ? p('authority:dangerFlags', 'true') : null,
-        meta.datasets?.length ? p('datasets', meta.datasets.join(', ')) : null,
+        // Pillar 4: agentic context — standard namespaces from the 1.7 ML-BOM convention
+        std('agentic:authority', deriveAgenticAuthority(meta)),
+        std('agentic:transport', meta.transport),
+        meta.requiresAuth === undefined ? null : std('agentic:requiresAuth', String(meta.requiresAuth)),
+        a.unpinnedSource ? std('runtime:fencing:unpinnedSource', 'true') : null,
+        a.dangerFlags    ? std('runtime:fencing:bypassConfirmation', 'true') : null,
+        a.broadFilesystem ? std('runtime:fencing:filesystemScope', 'broad') : null,
+        a.shellAccess    ? std('runtime:fencing:shellExecution', 'true') : null,
+        datasetNames.length ? p('datasets', datasetNames.join(', ')) : null,
         meta.architectures?.length ? p('architectures', meta.architectures.join(', ')) : null,
     ].filter(Boolean);
+}
+
+// Collapse detected MCP/agent authority into a single coarse scope label, the
+// value an enterprise reviewer scans for first (Least Agency Principle).
+function deriveAgenticAuthority(meta) {
+    if (meta.role !== 'mcp-server') return null;
+    const a = meta.authority || {};
+    if (a.shellAccess)     return 'shell-execution';
+    if (a.broadFilesystem) return 'filesystem-broad';
+    if (meta.requiresAuth) return 'scoped';
+    return 'unscoped';
 }
 
 function buildDependencies(components) {
@@ -255,7 +371,7 @@ function randomUUID() {
 // Used by the pipeline (to assert our own output) and by the API ingest endpoint
 // (to reject malformed external payloads before touching the DB).
 
-const SUPPORTED_SPEC_VERSIONS = new Set(['1.4', '1.5', '1.6']);
+const SUPPORTED_SPEC_VERSIONS = new Set(['1.4', '1.5', '1.6', '1.7']);
 
 function validateCycloneDX(doc) {
     const errors = [];
