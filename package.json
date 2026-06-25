@@ -8,7 +8,7 @@
   },
   "type": "commonjs",
   "scripts": {
-    "test": "node --test tests/parsers.test.js",
+    "test": "node --test tests/parsers.test.js tests/aibom.test.js",
     "serve": "node src/api/server.js",
     "e2e": "node scripts/e2e.js",
     "bench": "node scripts/benchmark.js",

@@ -97,7 +97,38 @@ function cdxComponent(comp) {
         c.scope = comp.scope === 'dev' ? 'excluded' : 'optional';
     }
 
+    // CycloneDX 1.6 AI/ML extensions
+    if (comp.type === 'machine-learning-model') {
+        if (comp.modelCard) c.modelCard = comp.modelCard;
+
+        const props = buildAIProperties(comp.aiMetadata || {});
+        if (props.length > 0) c.properties = props;
+    }
+
     return c;
+}
+
+function buildAIProperties(meta) {
+    const p = (name, value) =>
+        (value !== null && value !== undefined && value !== '')
+            ? { name: `packrai:ai:${name}`, value: String(value) }
+            : null;
+    return [
+        p('role',          meta.role),
+        p('source',        meta.source),
+        p('format',        meta.format),
+        p('pipeline',      meta.pipeline),
+        p('baseModel',     meta.baseModel),
+        p('provider',      meta.provider),
+        p('sdkPackage',    meta.sdkPackage),
+        p('gated',         meta.gated ? 'true' : null),
+        p('ggufVersion',   meta.ggufVersion),
+        p('fileSizeMB',    meta.fileSizeMB),
+        p('referencedIn',  meta.referencedIn),
+        p('lastModified',  meta.lastModified),
+        meta.datasets?.length ? p('datasets', meta.datasets.join(', ')) : null,
+        meta.architectures?.length ? p('architectures', meta.architectures.join(', ')) : null,
+    ].filter(Boolean);
 }
 
 function buildDependencies(components) {
