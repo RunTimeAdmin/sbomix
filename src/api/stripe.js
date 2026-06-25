@@ -10,15 +10,18 @@ const stripe = Stripe(process.env.STRIPE_SECRET_KEY || '', {
 // Example: STRIPE_PRICE_TEAM_MONTHLY=price_1Abc...
 function priceIdToPlan(priceId) {
     if (!priceId) return null;
-    const map = {
-        [process.env.STRIPE_PRICE_STARTER_MONTHLY]: 'starter',
-        [process.env.STRIPE_PRICE_STARTER_ANNUAL]:  'starter',
-        [process.env.STRIPE_PRICE_TEAM_MONTHLY]:    'team',
-        [process.env.STRIPE_PRICE_TEAM_ANNUAL]:     'team',
-        [process.env.STRIPE_PRICE_BUSINESS_MONTHLY]:'business',
-        [process.env.STRIPE_PRICE_BUSINESS_ANNUAL]: 'business',
-    };
-    return map[priceId] || null;
+    const entries = [
+        [process.env.STRIPE_PRICE_STARTER_MONTHLY,  'starter'],
+        [process.env.STRIPE_PRICE_STARTER_ANNUAL,   'starter'],
+        [process.env.STRIPE_PRICE_TEAM_MONTHLY,     'team'],
+        [process.env.STRIPE_PRICE_TEAM_ANNUAL,       'team'],
+        [process.env.STRIPE_PRICE_BUSINESS_MONTHLY, 'business'],
+        [process.env.STRIPE_PRICE_BUSINESS_ANNUAL,  'business'],
+    ];
+    for (const [id, plan] of entries) {
+        if (id && id === priceId) return plan;
+    }
+    return null;
 }
 
 const PLAN_LIMITS = {

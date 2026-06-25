@@ -275,7 +275,7 @@ async function sendVulnAlertIfNew(orgId, appId, appName) {
             html: `
 <!DOCTYPE html><html><body style="background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:40px;max-width:640px;margin:0 auto">
 <h1 style="font-size:20px;font-weight:700;margin-bottom:4px">New critical vulnerabilities detected</h1>
-<p style="color:#8b949e;margin-bottom:24px"><strong style="color:#e6edf3">${appName}</strong> has ${newCrits.length} new critical finding${newCrits.length > 1 ? 's' : ''} since its last scan.</p>
+<p style="color:#8b949e;margin-bottom:24px"><strong style="color:#e6edf3">${he(appName)}</strong> has ${newCrits.length} new critical finding${newCrits.length > 1 ? 's' : ''} since its last scan.</p>
 <table style="width:100%;border-collapse:collapse;background:#161b22;border:1px solid #30363d;border-radius:8px;overflow:hidden">
 <thead><tr style="background:#21262d">
   <th style="padding:8px 12px;text-align:left;font-size:12px;color:#8b949e">CVE / ID</th>
@@ -292,6 +292,12 @@ async function sendVulnAlertIfNew(orgId, appId, appName) {
     } catch (err) {
         console.error('[vuln-alert]', err.message);
     }
+}
+
+// ── HTML escape (for user-supplied strings embedded in email bodies) ──────────
+function he(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // ── API key helpers ───────────────────────────────────────────────────────────
@@ -314,6 +320,14 @@ function maybeUpdateLastUsed(keyHash) {
     db.query('UPDATE api_keys SET last_used_at = NOW() WHERE key_hash = $1', [keyHash])
         .catch(() => {});
 }
+
+// Evict stale entries from lastUsedCache every 30 minutes to prevent unbounded growth
+setInterval(() => {
+    const cutoff = Date.now() - LAST_USED_TTL * 2;
+    for (const [k, ts] of lastUsedCache) {
+        if (ts < cutoff) lastUsedCache.delete(k);
+    }
+}, 30 * 60 * 1000).unref();
 
 // ── Auth middleware factory ───────────────────────────────────────────────────
 // requireScope(scope) returns an Express middleware that:
@@ -553,13 +567,13 @@ app.get('/verify', async (req, res) => {
             html: `
 <!DOCTYPE html><html><body style="background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:40px;max-width:560px;margin:0 auto">
 <h1 style="font-size:22px;font-weight:700;margin-bottom:6px">Welcome to <span style="color:#3fb950">PackrAI</span></h1>
-<p style="color:#8b949e;margin-bottom:28px">Your org <strong style="color:#e6edf3">${org_name}</strong> is ready.</p>
+<p style="color:#8b949e;margin-bottom:28px">Your org <strong style="color:#e6edf3">${he(org_name)}</strong> is ready.</p>
 <p style="margin-bottom:10px;font-weight:600">Your API key</p>
-<div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px 20px;font-family:monospace;font-size:13px;word-break:break-all;color:#3fb950;margin-bottom:6px">${apiKey}</div>
+<div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px 20px;font-family:monospace;font-size:13px;word-break:break-all;color:#3fb950;margin-bottom:6px">${he(apiKey)}</div>
 <p style="color:#8b949e;font-size:12px;margin-bottom:28px">⚠ Save this key — it won't be shown again.</p>
 <h2 style="font-size:15px;font-weight:600;margin-bottom:12px">Quick start</h2>
 <pre style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;font-size:12px;overflow-x:auto;color:#e6edf3">npm install -g packrai
-packrai owner/repo --push --api-key ${apiKey}
+packrai owner/repo --push --api-key ${he(apiKey)}
 open https://api.packrai.xyz/dashboard</pre>
 <p style="margin-top:28px;color:#8b949e;font-size:13px">Need help? Reply to this email or visit <a href="https://packrai.xyz" style="color:#58a6ff">packrai.xyz</a>.</p>
 </body></html>`,
@@ -567,9 +581,9 @@ open https://api.packrai.xyz/dashboard</pre>
 
         return res.send(page('Email verified',
             `<h1 style="color:#3fb950">✓ Email verified!</h1>` +
-            `<p>Welcome, <strong style="color:#e6edf3">${org_name}</strong>. Your API key is below and has been emailed to <strong style="color:#e6edf3">${email}</strong>.</p>` +
+            `<p>Welcome, <strong style="color:#e6edf3">${he(org_name)}</strong>. Your API key is below and has been emailed to <strong style="color:#e6edf3">${he(email)}</strong>.</p>` +
             `<p style="color:#e6edf3;font-weight:600;margin-bottom:8px">Your API key</p>` +
-            `<div class="key" id="key" title="Click to copy">${apiKey}</div>` +
+            `<div class="key" id="key" title="Click to copy">${he(apiKey)}</div>` +
             `<p class="warn" style="margin-bottom:24px">⚠ Save this key — it won't be shown again after you leave this page.</p>` +
             `<a href="/dashboard" class="btn">Open dashboard</a>` +
             `<script>document.getElementById('key').addEventListener('click',function(){navigator.clipboard.writeText(this.textContent).then(()=>{this.style.borderColor='#3fb950';setTimeout(()=>this.style.borderColor='',1500)})});<\/script>`
@@ -670,7 +684,7 @@ app.post('/api/v1/register', registerLimiter, async (req, res) => {
             html: `
 <!DOCTYPE html><html><body style="background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:40px;max-width:560px;margin:0 auto">
 <h1 style="font-size:22px;font-weight:700;margin-bottom:6px">Verify your <span style="color:#3fb950">PackrAI</span> email</h1>
-<p style="color:#8b949e;margin-bottom:28px">One click to activate <strong style="color:#e6edf3">${cleanOrgName}</strong>. This link expires in 24 hours.</p>
+<p style="color:#8b949e;margin-bottom:28px">One click to activate <strong style="color:#e6edf3">${he(cleanOrgName)}</strong>. This link expires in 24 hours.</p>
 <a href="${verifyUrl}" style="display:inline-block;background:#238636;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:15px;margin-bottom:28px">Verify email &amp; get API key</a>
 <p style="color:#8b949e;font-size:12px;margin-bottom:4px">Or copy this URL into your browser:</p>
 <div style="background:#161b22;border:1px solid #30363d;border-radius:6px;padding:12px;font-family:monospace;font-size:11px;word-break:break-all;color:#58a6ff">${verifyUrl}</div>
@@ -720,9 +734,9 @@ app.post('/api/v1/resend-key', resendKeyLimiter, async (req, res) => {
                 html: `
 <!DOCTYPE html><html><body style="background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:40px;max-width:560px;margin:0 auto">
 <h1 style="font-size:22px;font-weight:700;margin-bottom:6px"><span style="color:#3fb950">PackrAI</span> — API key recovery</h1>
-<p style="color:#8b949e;margin-bottom:28px">Here is a new API key for <strong style="color:#e6edf3">${orgName}</strong>. This key has <strong>org:admin</strong> access.</p>
+<p style="color:#8b949e;margin-bottom:28px">Here is a new API key for <strong style="color:#e6edf3">${he(orgName)}</strong>. This key has <strong>org:admin</strong> access.</p>
 <p style="margin-bottom:10px;font-weight:600">New API key</p>
-<div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px 20px;font-family:monospace;font-size:13px;word-break:break-all;color:#3fb950;margin-bottom:6px">${apiKey}</div>
+<div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px 20px;font-family:monospace;font-size:13px;word-break:break-all;color:#3fb950;margin-bottom:6px">${he(apiKey)}</div>
 <p style="color:#8b949e;font-size:12px;margin-bottom:28px">⚠ Save this key — it won't be shown again.</p>
 <p style="color:#8b949e;font-size:13px">If you didn't request this, you can ignore it — your existing keys remain active.</p>
 <p style="margin-top:16px"><a href="https://api.packrai.xyz/dashboard" style="color:#58a6ff">Open dashboard →</a></p>
@@ -1199,18 +1213,17 @@ app.get('/api/v1/apps/:name/sbom/download', requireScope('sbom:read'), async (re
         if (!rows.length) return res.status(404).json({ error: 'App not found' });
 
         const row = rows[0];
+        const safeName = req.params.name.replace(/[^\w.-]/g, '_');
         if (format === 'spdx') {
             if (!row.spdx) return res.status(404).json({ error: 'No SPDX document stored for this app' });
-            const filename = `${req.params.name}-sbom.spdx.json`;
             res.setHeader('Content-Type', 'application/json');
-            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+            res.setHeader('Content-Disposition', `attachment; filename="${safeName}-sbom.spdx.json"`);
             return res.json(row.spdx);
         }
 
         // CycloneDX (always present)
-        const filename = `${req.params.name}-sbom.cdx.json`;
         res.setHeader('Content-Type', 'application/vnd.cyclonedx+json');
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Disposition', `attachment; filename="${safeName}-sbom.cdx.json"`);
         res.json(row.cyclonedx);
     } catch (err) {
         console.error('[sbom/download]', err.message);
@@ -1350,6 +1363,15 @@ app.get('/api/v1/apps/:name/diff', requireScope('sbom:read'), async (req, res) =
             fromId = fromId || recent.rows[1].id;
         }
 
+        // Verify both SBOM IDs belong to this org's app (prevents IDOR)
+        const ownerCheck = await db.query(
+            `SELECT id FROM sboms WHERE id = ANY($1::uuid[]) AND org_id = $2`,
+            [[fromId, toId], req.org.id]
+        );
+        if (ownerCheck.rows.length < 2) {
+            return res.status(404).json({ error: 'One or both SBOM IDs not found' });
+        }
+
         // Fetch component lists for each SBOM
         const compQuery = `
             SELECT c.purl, c.name, c.version, c.ecosystem
@@ -1369,8 +1391,8 @@ app.get('/api/v1/apps/:name/diff', requireScope('sbom:read'), async (req, res) =
             db.query(compQuery, [toId]),
             db.query(vulnQuery, [fromId, req.org.id]),
             db.query(vulnQuery, [toId,   req.org.id]),
-            db.query(`SELECT id, version, created_at FROM sboms WHERE id = $1`, [fromId]),
-            db.query(`SELECT id, version, created_at FROM sboms WHERE id = $1`, [toId]),
+            db.query(`SELECT id, version, created_at FROM sboms WHERE id = $1 AND org_id = $2`, [fromId, req.org.id]),
+            db.query(`SELECT id, version, created_at FROM sboms WHERE id = $1 AND org_id = $2`, [toId,   req.org.id]),
         ]);
 
         const compDiff = diffComponents(fromComps.rows, toComps.rows);
@@ -1823,11 +1845,13 @@ app.delete('/api/v1/account', requireScope('org:admin'), async (req, res) => {
 // Disabled by default. Set ENABLE_ADMIN_API=true to activate.
 // Never expose on the public internet without IP allowlisting.
 app.post('/api/v1/orgs', async (req, res) => {
-    if (!process.env.ENABLE_ADMIN_API) {
+    if (process.env.ENABLE_ADMIN_API !== 'true') {
         return res.status(404).json({ error: 'Not found' });
     }
     const adminKey = req.headers['x-admin-key'];
-    if (!adminKey || adminKey !== process.env.ADMIN_KEY) {
+    const expected = process.env.ADMIN_KEY || '';
+    if (!adminKey || adminKey.length !== expected.length ||
+        !crypto.timingSafeEqual(Buffer.from(adminKey), Buffer.from(expected))) {
         return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -1857,8 +1881,18 @@ app.post('/api/v1/orgs', async (req, res) => {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3080;
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
     process.stdout.write(`PackrAI API listening on :${PORT}\n`);
+    // Fail any jobs that were left running/pending from a previous process instance
+    try {
+        const { rowCount } = await db.query(
+            `UPDATE scan_jobs SET status='failed', error='Server restarted', updated_at=NOW()
+             WHERE status IN ('pending','running')`
+        );
+        if (rowCount) console.log(`[startup] marked ${rowCount} stale scan job(s) as failed`);
+    } catch (err) {
+        console.error('[startup] scan cleanup error:', err.message);
+    }
     if (process.env.KATZILLA_API_KEY) startKEVRefresh();
 });
 
