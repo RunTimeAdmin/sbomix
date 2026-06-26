@@ -3,6 +3,7 @@
 const express = require('express');
 const db      = require('../db');
 const { stripe, priceIdToPlan } = require('../stripe');
+const { sendEmail } = require('../services/emailService');
 
 const router = express.Router();
 
@@ -73,6 +74,32 @@ router.post('/webhooks/stripe', express.raw({ type: 'application/json' }), async
                     [sub.id]
                 );
                 console.log(`[stripe] subscription.deleted sub=${sub.id}`);
+                break;
+            }
+
+            case 'customer.subscription.trial_will_end': {
+                const sub = event.data.object;
+                const { rows } = await db.query(
+                    `SELECT name, email, plan FROM organizations WHERE stripe_subscription_id = $1`,
+                    [sub.id]
+                );
+                if (!rows.length || !rows[0].email) break;
+                const { name, email, plan } = rows[0];
+                const endsAt = sub.trial_end
+                    ? new Date(sub.trial_end * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+                    : 'in 3 days';
+                await sendEmail({
+                    to: email,
+                    subject: 'Your PackrAI trial ends in 3 days',
+                    html: `
+<!DOCTYPE html><html><body style="background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:40px;max-width:560px;margin:0 auto">
+<h1 style="font-size:22px;font-weight:700;margin-bottom:6px">Your <span style="color:#3fb950">PackrAI</span> trial ends ${endsAt}</h1>
+<p style="color:#8b949e;margin-bottom:24px">Hi <strong style="color:#e6edf3">${name}</strong> — your ${plan || 'trial'} plan trial is wrapping up. Keep your central dashboard, CVE blast-radius search, and SBOM history by confirming your plan.</p>
+<a href="https://api.packrai.xyz/dashboard" style="display:inline-block;background:#238636;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:15px;margin-bottom:24px">Manage billing &rarr;</a>
+<p style="color:#8b949e;font-size:13px">No action needed if your card is on file — your subscription continues automatically. Questions? Just reply to this email.</p>
+</body></html>`,
+                });
+                console.log(`[stripe] trial_will_end sub=${sub.id} org=${name} ends=${endsAt}`);
                 break;
             }
 

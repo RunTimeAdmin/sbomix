@@ -1,6 +1,8 @@
 'use strict';
 
 async function executeIngestTx(client, orgId, appName, { version, commit, branch, cyclonedx, spdx, stats, aibom }) {
+    const cdxComponents  = (cyclonedx.components || []).filter(c => c.purl);
+    const cdxVulnCount   = (cyclonedx.vulnerabilities || []).length;
     const appRes = await client.query(
         `INSERT INTO applications (org_id, name)
          VALUES ($1, $2)
@@ -21,8 +23,8 @@ async function executeIngestTx(client, orgId, appName, { version, commit, branch
         [
             appId, orgId, version, commit, branch,
             cyclonedx, spdx || null, aibom ? JSON.stringify(aibom) : null,
-            stats?.totalComponents ?? 0,
-            stats?.vulnerabilities ?? 0,
+            stats?.totalComponents ?? cdxComponents.length,
+            stats?.vulnerabilities ?? cdxVulnCount,
             stats?.critical ?? 0,
             stats?.qualityScore ?? null,
             stats?.ecosystems ?? [],
@@ -51,8 +53,8 @@ async function executeIngestTx(client, orgId, appName, { version, commit, branch
          WHERE app_latest_sboms.created_at <= EXCLUDED.created_at`,
         [
             appId, orgId, sbomId,
-            stats?.totalComponents ?? 0,
-            stats?.vulnerabilities ?? 0,
+            stats?.totalComponents ?? cdxComponents.length,
+            stats?.vulnerabilities ?? cdxVulnCount,
             stats?.critical ?? 0,
             stats?.qualityScore ?? null,
             stats?.ecosystems ?? [],

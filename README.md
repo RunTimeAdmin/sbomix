@@ -19,6 +19,8 @@ npx packrai RunTimeAdmin/myapp@v2.1.0
 
 Produces **CycloneDX 1.6** and **SPDX 2.3** in under 500ms. No Docker. No agents. No config files.
 
+> **☁️ Prefer it hosted?** Skip the Postgres setup — [**packrai.xyz**](https://packrai.xyz) is the managed platform: a web dashboard, CVE blast-radius search across every repo, AI-BOM, and SBOM history. Free plan, paid from $19/mo with a 14-day trial. [**Get started free →**](https://api.packrai.xyz/register)
+
 ---
 
 ## Quick Start
@@ -406,6 +408,8 @@ Both formats include all CISA 2025 minimum elements, full transitive dependency 
 ---
 
 ## Central Platform (Self-Hosted)
+
+> Don't want to run this yourself? The same platform is available fully managed at [packrai.xyz](https://packrai.xyz) — no Postgres, no server, free to start.
 
 The PackrAI API server answers org-wide questions like:
 

@@ -2,6 +2,14 @@
   "name": "packrai",
   "version": "0.3.1",
   "description": "Fast, accurate SBOM generation from GitHub repos and local lock files",
+  "homepage": "https://packrai.xyz",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RunTimeAdmin/PACKRAI.git"
+  },
+  "bugs": {
+    "url": "https://github.com/RunTimeAdmin/PACKRAI/issues"
+  },
   "main": "src/pipeline.js",
   "bin": {
     "packrai": "bin/packrai.js"

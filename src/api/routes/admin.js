@@ -7,7 +7,7 @@ const { hashApiKey, generateApiKey } = require('../middleware/auth');
 const router = express.Router();
 
 router.post('/api/v1/orgs', async (req, res) => {
-    if (!process.env.ENABLE_ADMIN_API) {
+    if (process.env.ENABLE_ADMIN_API !== 'true') {
         return res.status(404).json({ error: 'Not found' });
     }
     const adminKey = req.headers['x-admin-key'];
