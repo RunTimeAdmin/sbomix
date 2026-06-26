@@ -150,6 +150,22 @@
   .c-blue   { color: var(--blue); }
   .c-muted  { color: var(--muted); }
 
+  /* ── Scan job status ── */
+  .job-row { display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid var(--border); font-size:13px; }
+  .job-row:last-child { border-bottom:none; }
+  .job-repo { font-family:'Menlo','Consolas',monospace; font-size:12px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .job-ref  { color:var(--muted); font-size:11px; }
+  .b-spinning { background:rgba(88,166,255,.15); color:var(--blue); animation:pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+  /* ── Toggle switch ── */
+  .toggle { position:relative; display:inline-block; width:40px; height:22px; flex-shrink:0; }
+  .toggle input { opacity:0; width:0; height:0; }
+  .toggle-slider { position:absolute; inset:0; background:var(--border); border-radius:22px; cursor:pointer; transition:background .2s; }
+  .toggle-slider::before { content:''; position:absolute; width:16px; height:16px; left:3px; top:3px; background:#fff; border-radius:50%; transition:transform .2s; }
+  .toggle input:checked + .toggle-slider { background:var(--accent); }
+  .toggle input:checked + .toggle-slider::before { transform:translateX(18px); }
+
   /* ── Responsive ── */
   @media (max-width: 760px) {
     .cards, .detail-cards { grid-template-columns: repeat(2, 1fr); }
@@ -205,6 +221,30 @@
     <div id="top-vulns-wrap" class="loading"><span class="spinner"></span>Loading…</div>
   </div>
 
+  <!-- Scan section — shown when user has sbom:ingest or org:admin scope -->
+  <div class="section" id="scan-section" style="display:none">
+    <div class="section-hd"><div class="section-title">Scan a Repository</div></div>
+
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:2;min-width:200px">
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:6px">Repository</div>
+          <input class="search-input" id="scan-repo" placeholder="owner/repo  or  owner/repo@branch" style="width:100%" autocomplete="off" spellcheck="false">
+        </div>
+        <div style="flex:1;min-width:160px">
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:6px">
+            GitHub Token <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(private repos)</span>
+          </div>
+          <input type="password" class="search-input" id="scan-token" placeholder="ghp_… (optional)" style="width:100%" autocomplete="off">
+        </div>
+        <button class="search-btn" id="scan-btn" style="border-color:var(--accent);color:var(--accent)">Scan</button>
+      </div>
+      <div id="scan-error" style="display:none;margin-top:10px;font-size:13px;color:var(--red)"></div>
+    </div>
+
+    <div id="scan-jobs-wrap"></div>
+  </div>
+
   <!-- Keys section — only shown for org:admin keys -->
   <div class="section" id="keys-section" style="display:none">
     <div class="section-hd">
@@ -243,6 +283,78 @@
     </div>
 
     <div id="keys-wrap" class="loading"><span class="spinner"></span>Loading…</div>
+
+    <!-- Billing -->
+    <div style="margin-top:28px" id="billing-section">
+      <div class="section-hd"><div class="section-title">Plan &amp; Billing</div></div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px" id="billing-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+              <span id="billing-plan-name" style="font-weight:700;font-size:16px;text-transform:capitalize">Free</span>
+              <span id="billing-status-badge"></span>
+            </div>
+            <div id="billing-plan-desc" style="color:var(--muted);font-size:12px">Generate SBOMs · 1 app · 7-day history</div>
+            <div id="billing-period" style="color:var(--muted);font-size:12px;margin-top:3px"></div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0">
+            <button class="btn-sm" id="billing-upgrade-btn" style="border-color:var(--accent);color:var(--accent);display:none">Upgrade plan</button>
+            <button class="btn-sm" id="billing-manage-btn" style="display:none">Manage billing</button>
+          </div>
+        </div>
+
+        <!-- Plan picker (shown when Upgrade is clicked) -->
+        <div id="plan-picker" style="display:none;margin-top:18px;border-top:1px solid var(--border);padding-top:18px">
+          <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:12px">Choose a plan</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px" id="billing-cycle-toggle">
+            <button class="btn-sm active" id="cycle-monthly" onclick="setBillingCycle('monthly')" style="border-color:var(--accent);color:var(--accent)">Monthly</button>
+            <button class="btn-sm" id="cycle-annual" onclick="setBillingCycle('annual')" style="color:var(--muted)">Annual <span style="color:var(--accent);font-size:10px">2 months free</span></button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px" id="plan-cards"></div>
+          <div id="plan-picker-error" style="display:none;color:var(--red);font-size:12px;margin-top:10px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Account settings -->
+    <div style="margin-top:28px">
+      <div class="section-hd"><div class="section-title">Account Settings</div></div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+          <div>
+            <div style="font-weight:600;margin-bottom:4px">Vulnerability alert emails</div>
+            <div style="color:var(--muted);font-size:12px">Send an email when new critical vulnerabilities appear in a scan.</div>
+          </div>
+          <label class="toggle" title="Toggle vulnerability alert emails">
+            <input type="checkbox" id="alerts-toggle" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Danger zone -->
+    <div style="margin-top:20px">
+      <div class="section-hd"><div class="section-title" style="color:var(--red)">Danger Zone</div></div>
+      <div style="background:var(--surface);border:1px solid rgba(248,81,73,.3);border-radius:10px;padding:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+          <div>
+            <div style="font-weight:600;margin-bottom:4px">Delete account</div>
+            <div style="color:var(--muted);font-size:12px">Permanently deletes your org, all SBOMs, keys, and data. Cannot be undone.</div>
+          </div>
+          <button class="btn-sm" id="delete-account-btn" style="border-color:var(--red);color:var(--red);flex-shrink:0">Delete account</button>
+        </div>
+        <div id="delete-confirm" style="display:none;margin-top:16px;background:var(--bg);border:1px solid rgba(248,81,73,.4);border-radius:8px;padding:16px">
+          <div style="font-size:13px;margin-bottom:10px;color:var(--muted)">Type <strong style="color:var(--text)">delete my account</strong> to confirm:</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <input class="search-input" id="delete-confirm-input" placeholder="delete my account" style="flex:1;min-width:200px">
+            <button class="btn-sm" id="delete-confirm-btn" style="border-color:var(--red);color:var(--red)">Delete forever</button>
+            <button class="btn-sm" id="delete-cancel-btn">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
 </div>
@@ -403,54 +515,24 @@ async function loadDashboard() {
 
   if (meRes.status === 'fulfilled') {
     orgScopes = meRes.value.scopes || [];
-    const isAdmin = orgScopes.includes('org:admin');
-    document.getElementById('keys-section').style.display = isAdmin ? 'block' : 'none';
-    if (isAdmin) loadKeys();
-  }
-
-  // Summary cards
-  if (reportRes.status === 'fulfilled') {
-    const s = reportRes.value.summary;
-    document.getElementById('s-apps').textContent       = s.total_apps       ?? '0';
-    document.getElementById('s-components').textContent = s.unique_components ?? '0';
-    document.getElementById('s-critical').textContent   = s.critical          ?? '0';
-    document.getElementById('s-high').textContent       = s.high              ?? '0';
-  }
-
-  // Applications table
-  const appsEl = document.getElementById('apps-wrap');
-  if (appsRes.status === 'fulfilled') {
-    const apps = appsRes.value.apps;
-    if (!apps.length) {
-      appsEl.innerHTML = `<div class="empty">No apps ingested yet.<br><br>
-        Run <code style="font-family:monospace;font-size:12px;color:var(--accent)">npx packrai owner/repo</code>
-        and push your SBOM to see data here.</div>`;
-    } else {
-      appsEl.innerHTML = `
-        <div class="table-wrap"><table>
-          <thead><tr>
-            <th>Application</th><th>Ecosystems</th><th>Last scanned</th>
-            <th>Components</th><th>Vulns</th><th>Critical</th><th>Quality</th>
-          </tr></thead>
-          <tbody>${apps.map(a => `
-            <tr class="clickable" data-goto="${esc(a.name)}">
-              <td><span class="app-link">${esc(a.name)}</span></td>
-              <td>${ecoTags(a.ecosystems)}</td>
-              <td class="c-muted">${timeAgo(a.last_scanned)}</td>
-              <td>${a.component_count ?? '—'}</td>
-              <td>${Number(a.vulnerability_count) > 0
-                    ? `<span class="badge b-yellow">${a.vulnerability_count}</span>`
-                    : '<span class="c-green">0</span>'}</td>
-              <td>${Number(a.critical_count) > 0
-                    ? `<span class="badge b-red">${a.critical_count}</span>`
-                    : '<span class="c-green">0</span>'}</td>
-              <td>${qsBadge(a.quality_score)}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table></div>`;
+    const isAdmin   = orgScopes.includes('org:admin');
+    const canIngest = isAdmin || orgScopes.includes('sbom:ingest');
+    document.getElementById('keys-section').style.display  = isAdmin   ? 'block' : 'none';
+    document.getElementById('scan-section').style.display  = canIngest ? 'block' : 'none';
+    if (isAdmin) {
+      loadKeys();
+      loadBilling();
+      document.getElementById('alerts-toggle').checked = meRes.value.vuln_alerts !== false;
     }
+    if (canIngest) loadScanJobs();
+  }
+
+  // Summary cards + apps table — delegated to shared helpers (also used by scan poll)
+  if (reportRes.status === 'fulfilled') renderSummaryCards(reportRes.value.summary);
+  if (appsRes.status === 'fulfilled') {
+    renderAppsList(appsRes.value.apps);
   } else {
-    appsEl.innerHTML = '<div class="empty">Failed to load applications.</div>';
+    document.getElementById('apps-wrap').innerHTML = '<div class="empty">Failed to load applications.</div>';
   }
 
   // Top vulnerabilities table
@@ -1065,6 +1147,340 @@ document.querySelectorAll('.sbom-dl-item').forEach(item => {
       alert('Download failed.');
     }
   });
+});
+
+// ── Scan jobs ─────────────────────────────────────────────────────────────────
+
+let scanPollTimer = null;
+
+function renderScanJobs(jobs) {
+  const el = document.getElementById('scan-jobs-wrap');
+  if (!jobs.length) { el.innerHTML = ''; return; }
+
+  const statusBadge = j => {
+    if (j.status === 'done')    return '<span class="badge b-green">Done</span>';
+    if (j.status === 'failed')  return '<span class="badge b-red">Failed</span>';
+    if (j.status === 'running') return '<span class="badge b-spinning">Scanning…</span>';
+    return '<span class="badge b-muted">Queued</span>';
+  };
+
+  el.innerHTML = `<div class="table-wrap"><table>
+    <thead><tr><th>Repository</th><th>Ref</th><th>Status</th><th>App</th><th>Time</th><th>Details</th></tr></thead>
+    <tbody>${jobs.map(j => `<tr>
+      <td class="job-repo">${esc(j.repo)}</td>
+      <td class="job-ref">${j.ref ? esc(j.ref) : '<span class="c-muted">default</span>'}</td>
+      <td>${statusBadge(j)}</td>
+      <td>${j.app_name
+            ? `<span class="app-link" data-goto="${esc(j.app_name)}" style="cursor:pointer">${esc(j.app_name)}</span>`
+            : '<span class="c-muted">—</span>'}</td>
+      <td class="c-muted">${timeAgo(j.created_at)}</td>
+      <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--red);font-size:12px">${
+        j.status === 'failed' ? esc(j.error || 'Unknown error') : ''
+      }</td>
+    </tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+async function loadScanJobs() {
+  try {
+    const data = await apiFetch('/api/v1/scan');
+    renderScanJobs(data.jobs);
+    scheduleScanPoll(data.jobs);
+  } catch { /* silent */ }
+}
+
+function scheduleScanPoll(jobs) {
+  clearTimeout(scanPollTimer);
+  const hasActive = jobs.some(j => j.status === 'pending' || j.status === 'running');
+  if (hasActive) {
+    scanPollTimer = setTimeout(async () => {
+      await loadScanJobs();
+      // Refresh apps list when a job just completed
+      const fresh = await apiFetch('/api/v1/scan').catch(() => ({ jobs: [] }));
+      const nowDone = fresh.jobs.some(j => j.status === 'done');
+      if (nowDone) {
+        const [appsRes, reportRes] = await Promise.allSettled([
+          apiFetch('/api/v1/apps'),
+          apiFetch('/api/v1/report'),
+        ]);
+        // Re-render apps (reuse loadDashboard logic inline)
+        if (appsRes.status === 'fulfilled') renderAppsList(appsRes.value.apps);
+        if (reportRes.status === 'fulfilled') renderSummaryCards(reportRes.value.summary);
+      }
+    }, 3000);
+  }
+}
+
+function renderSummaryCards(s) {
+  if (!s) return;
+  document.getElementById('s-apps').textContent       = s.total_apps       ?? '0';
+  document.getElementById('s-components').textContent = s.unique_components ?? '0';
+  document.getElementById('s-critical').textContent   = s.critical          ?? '0';
+  document.getElementById('s-high').textContent       = s.high              ?? '0';
+}
+
+function renderAppsList(apps) {
+  const appsEl = document.getElementById('apps-wrap');
+  if (!apps.length) {
+    appsEl.innerHTML = `<div class="empty">No apps ingested yet.<br><br>
+      Run <code style="font-family:monospace;font-size:12px;color:var(--accent)">npx packrai owner/repo</code>
+      and push your SBOM to see data here.</div>`;
+    return;
+  }
+  appsEl.innerHTML = `<div class="table-wrap"><table>
+    <thead><tr>
+      <th>Application</th><th>Ecosystems</th><th>Last scanned</th>
+      <th>Components</th><th>Vulns</th><th>Critical</th><th>Quality</th>
+    </tr></thead>
+    <tbody>${apps.map(a => `
+      <tr class="clickable" data-goto="${esc(a.name)}">
+        <td><span class="app-link">${esc(a.name)}</span></td>
+        <td>${ecoTags(a.ecosystems)}</td>
+        <td class="c-muted">${timeAgo(a.last_scanned)}</td>
+        <td>${a.component_count ?? '—'}</td>
+        <td>${Number(a.vulnerability_count) > 0
+              ? `<span class="badge b-yellow">${a.vulnerability_count}</span>`
+              : '<span class="c-green">0</span>'}</td>
+        <td>${Number(a.critical_count) > 0
+              ? `<span class="badge b-red">${a.critical_count}</span>`
+              : '<span class="c-green">0</span>'}</td>
+        <td>${qsBadge(a.quality_score)}</td>
+      </tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+document.getElementById('scan-btn').addEventListener('click', async () => {
+  const repoVal  = document.getElementById('scan-repo').value.trim();
+  const tokenVal = document.getElementById('scan-token').value.trim();
+  const errEl    = document.getElementById('scan-error');
+  const btn      = document.getElementById('scan-btn');
+
+  errEl.style.display = 'none';
+  if (!repoVal) {
+    errEl.textContent = 'Enter a repository (e.g. facebook/react)';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Starting…';
+
+  try {
+    const body = { repo: repoVal };
+    if (tokenVal) body.token = tokenVal;
+    await apiFetch('/api/v1/scan', { method: 'POST', body: JSON.stringify(body) });
+    document.getElementById('scan-repo').value  = '';
+    document.getElementById('scan-token').value = '';
+    await loadScanJobs();
+  } catch (err) {
+    errEl.textContent = err.status === 429
+      ? 'Active scans already running — wait for them to finish.'
+      : 'Failed to start scan. Check the repo name and try again.';
+    errEl.style.display = 'block';
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Scan';
+});
+
+document.getElementById('scan-repo').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('scan-btn').click();
+});
+
+// ── Billing ───────────────────────────────────────────────────────────────────
+
+const PLAN_LABELS = {
+  free:     { name: 'Free',     desc: 'Generate SBOMs · 1 app · 7-day history' },
+  starter:  { name: 'Starter',  desc: 'Track your apps · 10 apps · 30-day history' },
+  team:     { name: 'Team',     desc: 'Protect every PR · 50 apps · 5 seats · 180-day history' },
+  business: { name: 'Business', desc: 'Manage org exposure · 250 apps · 20 seats · 1-year history' },
+  enterprise:{ name:'Enterprise',desc:'Governed supply-chain risk at scale' },
+};
+
+// price IDs injected from the server at page load (see loadBilling)
+let PRICES = {};
+let currentBillingCycle = 'monthly';
+
+async function loadBilling() {
+  try {
+    const data = await apiFetch('/api/v1/billing');
+    renderBilling(data);
+
+    // Also fetch available prices from the server
+    const priceData = await apiFetch('/api/v1/billing/prices').catch(() => null);
+    if (priceData) PRICES = priceData;
+  } catch { /* silent — billing section just stays in default state */ }
+}
+
+function renderBilling(data) {
+  const plan   = data.plan || 'free';
+  const status = data.status;
+  const label  = PLAN_LABELS[plan] || PLAN_LABELS.free;
+
+  document.getElementById('billing-plan-name').textContent = label.name;
+  document.getElementById('billing-plan-desc').textContent = label.desc;
+
+  // Status badge
+  const badgeEl = document.getElementById('billing-status-badge');
+  if (status === 'trialing') {
+    badgeEl.innerHTML = '<span class="badge b-blue">Trial</span>';
+  } else if (status === 'past_due') {
+    badgeEl.innerHTML = '<span class="badge b-red">Past due</span>';
+  } else if (status === 'canceled') {
+    badgeEl.innerHTML = '<span class="badge b-muted">Canceled</span>';
+  } else if (status === 'active' && plan !== 'free') {
+    badgeEl.innerHTML = '<span class="badge b-green">Active</span>';
+  } else {
+    badgeEl.innerHTML = '';
+  }
+
+  // Period end
+  const periodEl = document.getElementById('billing-period');
+  if (data.current_period_end) {
+    const d = new Date(data.current_period_end);
+    const label = status === 'trialing' ? 'Trial ends' : status === 'canceled' ? 'Access until' : 'Renews';
+    periodEl.textContent = `${label} ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  } else {
+    periodEl.textContent = '';
+  }
+
+  // Buttons
+  const upgradeBtn = document.getElementById('billing-upgrade-btn');
+  const manageBtn  = document.getElementById('billing-manage-btn');
+
+  if (plan === 'free' || plan === 'starter' || status === 'canceled') {
+    upgradeBtn.style.display = '';
+    manageBtn.style.display  = 'none';
+  } else if (data.has_payment_method) {
+    upgradeBtn.style.display = 'none';
+    manageBtn.style.display  = '';
+  }
+}
+
+function setBillingCycle(cycle) {
+  currentBillingCycle = cycle;
+  document.getElementById('cycle-monthly').classList.toggle('active', cycle === 'monthly');
+  document.getElementById('cycle-annual').classList.toggle('active',  cycle === 'annual');
+  document.getElementById('cycle-monthly').style.borderColor = cycle === 'monthly' ? 'var(--accent)' : 'var(--border)';
+  document.getElementById('cycle-monthly').style.color       = cycle === 'monthly' ? 'var(--accent)' : 'var(--muted)';
+  document.getElementById('cycle-annual').style.borderColor  = cycle === 'annual'  ? 'var(--accent)' : 'var(--border)';
+  document.getElementById('cycle-annual').style.color        = cycle === 'annual'  ? 'var(--accent)' : 'var(--muted)';
+  renderPlanCards();
+}
+
+const PLAN_CARD_META = [
+  { plan: 'starter',  label: 'Starter',  monthly: '$19/mo', annual: '$190/yr', save: '' },
+  { plan: 'team',     label: 'Team',     monthly: '$99/mo', annual: '$990/yr', save: 'Most popular' },
+  { plan: 'business', label: 'Business', monthly: '$299/mo',annual: '$2,990/yr',save: '' },
+];
+
+function renderPlanCards() {
+  const container = document.getElementById('plan-cards');
+  container.innerHTML = PLAN_CARD_META.map(p => {
+    const priceId = PRICES[`${p.plan}_${currentBillingCycle}`];
+    const price   = currentBillingCycle === 'annual' ? p.annual : p.monthly;
+    return `<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:2px">${p.label}${p.save ? ` <span style="color:var(--accent);font-size:10px;font-weight:600">${p.save}</span>` : ''}</div>
+      <div style="font-size:18px;font-weight:800;margin-bottom:10px">${price}</div>
+      <button class="btn-sm" style="width:100%;border-color:var(--accent);color:var(--accent)"
+        onclick="startCheckout('${priceId || ''}','${p.label}')">
+        Select
+      </button>
+    </div>`;
+  }).join('');
+}
+
+async function startCheckout(priceId, planLabel) {
+  const errEl = document.getElementById('plan-picker-error');
+  errEl.style.display = 'none';
+
+  if (!priceId) {
+    errEl.textContent = 'Billing is not yet configured on this server.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  try {
+    const data = await apiFetch('/api/v1/billing/checkout', {
+      method: 'POST',
+      body: JSON.stringify({ priceId }),
+    });
+    window.location.href = data.url;
+  } catch (err) {
+    errEl.textContent = `Could not start checkout: ${err.message || 'Unknown error'}`;
+    errEl.style.display = 'block';
+  }
+}
+
+document.getElementById('billing-upgrade-btn').addEventListener('click', () => {
+  const picker = document.getElementById('plan-picker');
+  const isOpen = picker.style.display !== 'none';
+  picker.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) renderPlanCards();
+});
+
+document.getElementById('billing-manage-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('billing-manage-btn');
+  btn.disabled = true;
+  btn.textContent = 'Loading…';
+  try {
+    const data = await apiFetch('/api/v1/billing/portal', { method: 'POST' });
+    window.location.href = data.url;
+  } catch {
+    btn.disabled = false;
+    btn.textContent = 'Manage billing';
+  }
+});
+
+// ── Alert toggle ─────────────────────────────────────────────────────────────
+
+document.getElementById('alerts-toggle').addEventListener('change', async function () {
+  const checked = this.checked;
+  try {
+    await apiFetch('/api/v1/account/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ vuln_alerts: checked }),
+    });
+  } catch {
+    this.checked = !checked; // revert on failure
+  }
+});
+
+// ── Delete account ────────────────────────────────────────────────────────────
+
+document.getElementById('delete-account-btn').addEventListener('click', () => {
+  document.getElementById('delete-confirm').style.display = 'block';
+  document.getElementById('delete-confirm-input').value = '';
+  document.getElementById('delete-account-btn').style.display = 'none';
+});
+
+document.getElementById('delete-cancel-btn').addEventListener('click', () => {
+  document.getElementById('delete-confirm').style.display = 'none';
+  document.getElementById('delete-account-btn').style.display = '';
+});
+
+document.getElementById('delete-confirm-btn').addEventListener('click', async () => {
+  const val = document.getElementById('delete-confirm-input').value.trim();
+  if (val !== 'delete my account') {
+    document.getElementById('delete-confirm-input').focus();
+    document.getElementById('delete-confirm-input').style.borderColor = 'var(--red)';
+    setTimeout(() => { document.getElementById('delete-confirm-input').style.borderColor = ''; }, 1200);
+    return;
+  }
+  const btn = document.getElementById('delete-confirm-btn');
+  btn.disabled = true;
+  btn.textContent = 'Deleting…';
+  try {
+    await apiFetch('/api/v1/account', {
+      method: 'DELETE',
+      body: JSON.stringify({ confirm: 'delete my account' }),
+    });
+    logout();
+  } catch {
+    btn.disabled = false;
+    btn.textContent = 'Delete forever';
+    alert('Deletion failed — please try again.');
+  }
 });
 
 // ── Auth ──────────────────────────────────────────────────────────────────────

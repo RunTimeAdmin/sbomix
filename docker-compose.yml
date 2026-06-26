@@ -17,7 +17,7 @@ services:
   api:
     build: .
     ports:
-      - "${PORT:-3080}:3080"
+      - "127.0.0.1:${PORT:-3080}:3080"
     environment:
       DATABASE_URL:      postgres://packrai:${POSTGRES_PASSWORD:-changeme}@db:5432/packrai
       ADMIN_KEY:         ${ADMIN_KEY:?ADMIN_KEY must be set in .env}
@@ -29,6 +29,15 @@ services:
       ENABLE_ADMIN_API:  ${ENABLE_ADMIN_API:-}
       RESEND_API_KEY:    ${RESEND_API_KEY:-}
       RESEND_FROM:       ${RESEND_FROM:-}
+      STRIPE_SECRET_KEY:             ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET:         ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRICE_STARTER_MONTHLY:  ${STRIPE_PRICE_STARTER_MONTHLY:-}
+      STRIPE_PRICE_STARTER_ANNUAL:   ${STRIPE_PRICE_STARTER_ANNUAL:-}
+      STRIPE_PRICE_TEAM_MONTHLY:     ${STRIPE_PRICE_TEAM_MONTHLY:-}
+      STRIPE_PRICE_TEAM_ANNUAL:      ${STRIPE_PRICE_TEAM_ANNUAL:-}
+      STRIPE_PRICE_BUSINESS_MONTHLY: ${STRIPE_PRICE_BUSINESS_MONTHLY:-}
+      STRIPE_PRICE_BUSINESS_ANNUAL:  ${STRIPE_PRICE_BUSINESS_ANNUAL:-}
+      APP_URL:                       ${APP_URL:-https://api.packrai.xyz}
     depends_on:
       db:
         condition: service_healthy

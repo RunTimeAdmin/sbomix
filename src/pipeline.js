@@ -18,6 +18,8 @@ const { enrichWithLicenses } = require('./licenses');
 const { generateCycloneDX, validateCycloneDX } = require('./generators/cyclonedx');
 const { generateSPDX } = require('./generators/spdx');
 const { assessLicenses } = require('./licensePolicy');
+const { detectAILocal, enrichAIComponents, finalizeAIResult } = require('./aibom');
+const { buildAIBomDocument, attachToCycloneDX } = require('./ai/document');
 
 /**
  * Generate SBOMs from a local directory.
@@ -32,6 +34,11 @@ const { assessLicenses } = require('./licensePolicy');
  * @param {boolean} [opts.recursive] - walk subdirs for monorepos (default: true)
  * @param {string}  [opts.format]    - 'both' | 'cyclonedx' | 'spdx' (default: 'both')
  * @param {boolean} [opts.docker]    - audit Dockerfiles and include base images (default: true)
+ * @param {boolean} [opts.aibom]     - detect AI/ML components and assess threats (default: true)
+ * @param {boolean} [opts.aibomEnrich] - run HuggingFace Hub enrichment for AI components
+ *                                        (network). Defaults to opts.vulns — off on fast scans.
+ * @param {object}  [opts.signingKeys] - { classicalPrivateKey, classicalPublicKey, pqcPrivateKey?, pqcPublicKey? }
+ *                                        when present, the AI BOM lineage is cryptographically signed
  */
 async function generateFromDirectory(dir, opts = {}) {
     const startMs = Date.now();
@@ -40,6 +47,10 @@ async function generateFromDirectory(dir, opts = {}) {
     const runVulns    = opts.vulns    !== false;
     const runLicenses = opts.licenses !== false;
     const runDocker   = opts.docker   !== false;
+    const runAIBOM    = opts.aibom    !== false;
+    // AI Hub enrichment is network-bound — defaults to follow vulns (off on the
+    // server fast-scan path), so local detection alone keeps the hot path fast.
+    const runAIEnrich = opts.aibomEnrich !== undefined ? opts.aibomEnrich : runVulns;
     const fmt = opts.format || 'both';
     const wantCDX  = fmt !== 'spdx';
     const wantSPDX = fmt !== 'cyclonedx';
@@ -60,7 +71,23 @@ async function generateFromDirectory(dir, opts = {}) {
         ecosystemsFound.add(lf.ecosystem);
     }
 
-    // 2b. Dockerfile audit — runs independently of lock-file count
+    // 2b. AI BOM — LOCAL detection only (filesystem, no network). Fast hot path.
+    //     Hub enrichment is deferred to the parallel block below, mirroring OSV.
+    let aiLocal = null;
+    let aiBOM   = { components: [], threats: [], stats: {} };
+    if (runAIBOM) {
+        try {
+            const pypiComps = allComponents.filter((c) => c.ecosystem === 'pypi');
+            // Weight hashing is local but I/O-heavy on large models — follow the
+            // same gate as enrichment so the server fast scan stays fast.
+            aiLocal = detectAILocal(dir, pypiComps, { hashWeights: runAIEnrich });
+            allComponents.push(...aiLocal.components);
+        } catch (e) {
+            console.warn(`[packrai] AI BOM warning: ${e.message}`);
+        }
+    }
+
+    // 2c. Dockerfile audit — runs independently of lock-file count
     const dockerfileAudit = [];
     if (runDocker) {
         const maxDepth = opts.recursive !== false ? 4 : 0;
@@ -73,13 +100,29 @@ async function generateFromDirectory(dir, opts = {}) {
         }
     }
 
-    // 3. Parallel enrichment — library components + base image CVE lookup
+    // 3. Parallel enrichment — all network lookups fire concurrently:
+    //    library OSV + licenses, container base-image CVEs, and AI Hub metadata.
+    //    AI library components skip OSV/license (they're models, not packages).
+    const libCompsForEnrich = allComponents.filter((c) => c.ecosystem !== 'ai' && c.ecosystem !== 'container');
     const baseVulnMap = new Map();
-    await Promise.all([
-        runLicenses && allComponents.length > 0 ? enrichWithLicenses(allComponents) : null,
-        runVulns    && allComponents.length > 0 ? enrichWithOSV(allComponents)      : null,
-        runDocker   ? fetchAllBaseVulns(dockerfileAudit, baseVulnMap)               : null,
+    const [, , , aiEnrich] = await Promise.all([
+        runLicenses && libCompsForEnrich.length > 0 ? enrichWithLicenses(libCompsForEnrich) : null,
+        runVulns    && libCompsForEnrich.length > 0 ? enrichWithOSV(libCompsForEnrich)      : null,
+        runDocker   ? fetchAllBaseVulns(dockerfileAudit, baseVulnMap)                        : null,
+        (runAIBOM && runAIEnrich && aiLocal) ? enrichAIComponents(aiLocal.enrichTargets) : null,
     ]);
+
+    // 3a. Merge enrichment results (threats + Hub-discovered dataset components)
+    //     into the local result, then finalize. Threats from enrichment
+    //     (NO_PROVENANCE, RESTRICTED_LICENSE) must not be dropped.
+    if (aiLocal) {
+        if (aiEnrich?.threats?.length)    aiLocal.threats.push(...aiEnrich.threats);
+        if (aiEnrich?.components?.length) {
+            aiLocal.components.push(...aiEnrich.components);
+            allComponents.push(...aiEnrich.components);
+        }
+        aiBOM = finalizeAIResult(aiLocal);
+    }
 
     // 3b. Add container base images after enrichment — keeps them out of OSV/license
     //     lookups and the quality score calculation.
@@ -106,8 +149,27 @@ async function generateFromDirectory(dir, opts = {}) {
         spdx = generateSPDX(allComponents, meta);
     }
 
+    // 4b. Assemble the AI BOM attestation: hash-chained lineage, optional PQC
+    //     signature, and ISO 42001 / EU AI Act control mapping. Attach the
+    //     signature + lineage reference to the CycloneDX BOM.
+    let aiBomDocument = null;
+    if (runAIBOM && aiBOM.components.length > 0) {
+        try {
+            aiBomDocument = buildAIBomDocument({
+                aiComponents:   aiBOM.components,
+                threats:        aiBOM.threats,
+                meta,
+                keys:           opts.signingKeys || null,
+                agentic:        aiBOM.agentic || null,
+            });
+            if (cyclonedx) attachToCycloneDX(cyclonedx, aiBomDocument);
+        } catch (e) {
+            console.warn(`[packrai] AI BOM attestation warning: ${e.message}`);
+        }
+    }
+
     const elapsedMs = Date.now() - startMs;
-    const libComponents = allComponents.filter((c) => c.ecosystem !== 'container');
+    const libComponents = allComponents.filter((c) => c.ecosystem !== 'container' && c.ecosystem !== 'ai');
     const { vulnCount, criticalCount } = countVulns(libComponents);
     const licenseCompliance = assessLicenses(libComponents);
 
@@ -121,6 +183,8 @@ async function generateFromDirectory(dir, opts = {}) {
         spdx,
         components: allComponents,
         dockerfileAudit,
+        aiThreats: aiBOM.threats,
+        aiBom: aiBomDocument,
         stats: {
             totalComponents: allComponents.length,
             ecosystems: [...ecosystemsFound],
@@ -135,6 +199,13 @@ async function generateFromDirectory(dir, opts = {}) {
             dockerFindings,
             dockerHigh,
             elapsedMs,
+            // AI BOM stats
+            aiModels:        aiBOM.stats.aiModels        ?? 0,
+            aiApiProviders:  aiBOM.stats.apiProviders    ?? 0,
+            aiFrameworks:    aiBOM.stats.frameworks      ?? 0,
+            aiThreats:       aiBOM.stats.aiThreats       ?? 0,
+            aiCritical:      aiBOM.stats.criticalThreats ?? 0,
+            aiHigh:          aiBOM.stats.highThreats     ?? 0,
         },
     };
 }
@@ -144,15 +215,31 @@ async function generateFromDirectory(dir, opts = {}) {
  *
  * @param {object} result   - from generateFromDirectory
  * @param {string} outDir   - directory to write to
- * @returns {{ cyclonedxPath, spdxPath }}
+ * @param {object} [opts]
+ * @param {string} [opts.aibomFormat] - 'json' | 'yaml' for the AI BOM (default: 'json')
+ * @returns {{ cyclonedxPath, spdxPath, aibomPath }}
  */
-function writeOutputs(result, outDir) {
+function writeOutputs(result, outDir, opts = {}) {
     fs.mkdirSync(outDir, { recursive: true });
-    const cdxPath = path.join(outDir, 'bom.cyclonedx.json');
+    const cdxPath  = path.join(outDir, 'bom.cyclonedx.json');
     const spdxPath = path.join(outDir, 'bom.spdx.json');
-    fs.writeFileSync(cdxPath, JSON.stringify(result.cyclonedx, null, 2));
-    fs.writeFileSync(spdxPath, JSON.stringify(result.spdx, null, 2));
-    return { cyclonedxPath: cdxPath, spdxPath };
+    if (result.cyclonedx) fs.writeFileSync(cdxPath,  JSON.stringify(result.cyclonedx, null, 2));
+    if (result.spdx)      fs.writeFileSync(spdxPath, JSON.stringify(result.spdx,      null, 2));
+
+    let aibomPath = null;
+    if (result.aiBom) {
+        const { serializeAIBom } = require('./ai/document');
+        const fmt = (opts.aibomFormat || 'json').toLowerCase();
+        const ext = (fmt === 'yaml' || fmt === 'yml') ? 'yaml' : 'json';
+        aibomPath = path.join(outDir, `aibom.${ext}`);
+        fs.writeFileSync(aibomPath, serializeAIBom(result.aiBom, fmt));
+    }
+
+    return {
+        cyclonedxPath: result.cyclonedx ? cdxPath : null,
+        spdxPath:      result.spdx ? spdxPath : null,
+        aibomPath,
+    };
 }
 
 /**
@@ -215,8 +302,8 @@ function makeContainerComponent(img) {
 }
 
 function computeQualityScore(components, lockFiles) {
-    // Only score library components — container base images are tracked separately
-    const libs = components.filter((c) => c.ecosystem !== 'container');
+    // Only score library components — container and AI components are tracked separately
+    const libs = components.filter((c) => c.ecosystem !== 'container' && c.ecosystem !== 'ai');
     if (!libs.length) return 0;
 
     const NOASSERT = new Set(['NOASSERTION', 'UNKNOWN', null, undefined, '']);

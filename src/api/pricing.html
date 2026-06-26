@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pricing — PackrAI</title>
+<meta name="description" content="Fast SBOM generation and CVE exposure tracking for teams that ship software. Free to start, scales to enterprise.">
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --accent:  #3fb950;
+    --red:     #f85149;
+    --blue:    #58a6ff;
+    --yellow:  #d29922;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15px; line-height: 1.6; }
+
+  /* ── Header ── */
+  header { border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-weight: 700; font-size: 18px; letter-spacing: -0.3px; text-decoration: none; color: var(--text); }
+  .logo span { color: var(--accent); }
+  .nav-links { display: flex; gap: 20px; align-items: center; }
+  .nav-links a { color: var(--muted); font-size: 13px; text-decoration: none; }
+  .nav-links a:hover { color: var(--text); }
+  .nav-cta { background: var(--accent) !important; color: #000 !important; font-weight: 700 !important; padding: 7px 16px; border-radius: 7px; font-size: 13px !important; }
+  .nav-cta:hover { opacity: .88; }
+
+  /* ── Hero ── */
+  .hero { text-align: center; padding: 72px 24px 52px; max-width: 760px; margin: 0 auto; }
+  .hero-eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); margin-bottom: 16px; }
+  .hero h1 { font-size: clamp(24px, 4vw, 38px); font-weight: 800; letter-spacing: -0.5px; line-height: 1.2; margin-bottom: 16px; }
+  .hero p { color: var(--muted); font-size: 16px; max-width: 520px; margin: 0 auto 36px; }
+
+  /* ── Billing toggle ── */
+  .toggle-wrap { display: inline-flex; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 4px; gap: 2px; margin-bottom: 52px; }
+  .toggle-btn { padding: 7px 22px; border-radius: 7px; border: none; cursor: pointer; font-size: 14px; font-weight: 600; background: none; color: var(--muted); transition: all .15s; }
+  .toggle-btn.active { background: var(--accent); color: #000; }
+
+  /* ── Cards ── */
+  .cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; max-width: 1280px; margin: 0 auto; padding: 0 24px 80px; }
+  @media (max-width: 1100px) { .cards { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 680px)  { .cards { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 26px 20px 22px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+  .card.featured { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 8px 32px rgba(63,185,80,.1); }
+
+  .popular-badge {
+    position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+    background: var(--accent); color: #000; font-size: 10px; font-weight: 700;
+    letter-spacing: .07em; text-transform: uppercase; padding: 3px 12px;
+    border-radius: 20px; white-space: nowrap;
+  }
+
+  .tier-name    { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin-bottom: 6px; }
+  .tier-tagline { font-size: 13px; color: var(--muted); margin-bottom: 18px; min-height: 36px; line-height: 1.4; }
+
+  .price-wrap { margin-bottom: 18px; }
+  .price { font-size: 34px; font-weight: 800; letter-spacing: -1px; line-height: 1; }
+  .price sub { font-size: 16px; font-weight: 500; vertical-align: baseline; margin-right: 1px; }
+  .price-period { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .price-save { font-size: 11px; color: var(--accent); margin-top: 3px; height: 15px; }
+
+  .card-cta {
+    display: block; text-align: center; padding: 10px; border-radius: 8px;
+    font-size: 13px; font-weight: 700; text-decoration: none; margin-bottom: 22px;
+    transition: opacity .15s; cursor: pointer; border: none; width: 100%;
+  }
+  .card-cta:hover { opacity: .85; }
+  .cta-primary   { background: var(--accent); color: #000; }
+  .cta-secondary { background: none; color: var(--text); border: 1px solid var(--border) !important; }
+  .cta-enterprise { background: none; color: var(--blue); border: 1px solid rgba(88,166,255,.4) !important; }
+
+  /* ── Limits strip ── */
+  .limits { display: flex; flex-direction: column; gap: 0; background: rgba(255,255,255,.03); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 18px; }
+  .limit-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; padding: 4px 0; border-bottom: 1px solid rgba(48,54,61,.5); }
+  .limit-row:last-child { border-bottom: none; }
+  .limit-label { color: var(--muted); }
+  .limit-val   { font-weight: 600; color: var(--text); }
+  .limit-val.accent { color: var(--accent); }
+
+  /* ── Feature list ── */
+  .features { list-style: none; flex: 1; }
+  .features li { font-size: 12px; color: #cdd5de; padding: 5px 0; border-bottom: 1px solid rgba(48,54,61,.5); display: flex; align-items: flex-start; gap: 8px; line-height: 1.4; }
+  .features li:last-child { border-bottom: none; }
+  .check       { color: var(--accent); flex-shrink: 0; font-size: 11px; margin-top: 1px; }
+  .check-muted { color: var(--border); flex-shrink: 0; font-size: 11px; margin-top: 1px; }
+  .feat-section { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); padding: 10px 0 3px; border-bottom: none !important; }
+
+  /* ── Outcome strip ── */
+  .outcomes { max-width: 960px; margin: 0 auto 72px; padding: 0 24px; }
+  .outcomes h2 { font-size: 20px; font-weight: 700; text-align: center; margin-bottom: 28px; }
+  .outcome-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+  .outcome-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 16px; }
+  .outcome-card p { font-size: 14px; color: var(--text); line-height: 1.5; }
+  .outcome-card p::before { content: '"'; color: var(--accent); font-size: 20px; font-weight: 700; line-height: 0; vertical-align: -4px; margin-right: 2px; }
+  .outcome-card p::after  { content: '"'; color: var(--accent); font-size: 20px; font-weight: 700; line-height: 0; vertical-align: -4px; margin-left: 2px; }
+
+  /* ── FAQ ── */
+  .faq { max-width: 720px; margin: 0 auto; padding: 0 24px 80px; }
+  .faq h2 { font-size: 22px; font-weight: 700; margin-bottom: 28px; }
+  .faq-item { border-bottom: 1px solid var(--border); }
+  .faq-q {
+    width: 100%; text-align: left; background: none; border: none; color: var(--text);
+    font-size: 14px; font-weight: 600; padding: 16px 0; cursor: pointer;
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  }
+  .faq-q:hover { color: var(--accent); }
+  .faq-chevron { color: var(--muted); font-size: 17px; flex-shrink: 0; transition: transform .2s; }
+  .faq-a { display: none; font-size: 13px; color: var(--muted); padding-bottom: 16px; line-height: 1.65; }
+  .faq-item.open .faq-a { display: block; }
+  .faq-item.open .faq-chevron { transform: rotate(180deg); }
+
+  /* ── Footer ── */
+  footer { border-top: 1px solid var(--border); padding: 24px; text-align: center; font-size: 13px; color: var(--muted); }
+  footer a { color: var(--muted); margin: 0 10px; text-decoration: none; }
+  footer a:hover { color: var(--text); }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="logo" href="/">Packr<span>AI</span></a>
+  <nav class="nav-links">
+    <a href="/docs">Docs</a>
+    <a href="/dashboard">Dashboard</a>
+    <a class="nav-cta" href="/register">Get started free</a>
+  </nav>
+</header>
+
+<!-- Hero -->
+<div class="hero">
+  <div class="hero-eyebrow">Pricing</div>
+  <h1>Fast SBOM generation and CVE exposure tracking<br>for teams that ship software.</h1>
+  <p>Start free. No credit card required. Upgrade when your supply-chain risk demands it.</p>
+  <div class="toggle-wrap">
+    <button class="toggle-btn active" id="btn-monthly" onclick="setBilling('monthly')">Monthly</button>
+    <button class="toggle-btn" id="btn-annual" onclick="setBilling('annual')">Annual &nbsp;<span style="color:var(--accent);font-size:11px;font-weight:600">2 months free</span></button>
+  </div>
+</div>
+
+<!-- Cards -->
+<div class="cards">
+
+  <!-- Free -->
+  <div class="card">
+    <div class="tier-name">Free</div>
+    <div class="tier-tagline">Generate SBOMs</div>
+    <div class="price-wrap">
+      <div class="price"><sub>$</sub>0</div>
+      <div class="price-period">forever</div>
+      <div class="price-save">&nbsp;</div>
+    </div>
+    <a class="card-cta cta-secondary" href="/register">Get started</a>
+    <div class="limits">
+      <div class="limit-row"><span class="limit-label">Private apps</span><span class="limit-val">1</span></div>
+      <div class="limit-row"><span class="limit-label">CLI / local</span><span class="limit-val accent">Unlimited</span></div>
+      <div class="limit-row"><span class="limit-label">History</span><span class="limit-val">7 days</span></div>
+      <div class="limit-row"><span class="limit-label">Users</span><span class="limit-val">1</span></div>
+    </div>
+    <ul class="features">
+      <li class="feat-section">Included</li>
+      <li><span class="check">✓</span> CLI SBOM generation</li>
+      <li><span class="check">✓</span> CycloneDX + SPDX export</li>
+      <li><span class="check">✓</span> CVE lookup via OSV.dev</li>
+      <li><span class="check">✓</span> CISA KEV flags</li>
+      <li><span class="check">✓</span> GitHub Action (public/OSS)</li>
+      <li><span class="check">✓</span> Hosted dashboard (1 app)</li>
+      <li><span class="check-muted">—</span> <span style="color:var(--muted)">SBOM diff</span></li>
+      <li><span class="check-muted">—</span> <span style="color:var(--muted)">Vuln alert emails</span></li>
+      <li><span class="check-muted">—</span> <span style="color:var(--muted)">AI remediation</span></li>
+    </ul>
+  </div>
+
+  <!-- Starter -->
+  <div class="card">
+    <div class="tier-name">Starter</div>
+    <div class="tier-tagline">Track your own apps</div>
+    <div class="price-wrap">
+      <div class="price price-monthly"><sub>$</sub>19</div>
+      <div class="price price-annual" style="display:none"><sub>$</sub>190</div>
+      <div class="price-period">
+        <span class="period-monthly">per month</span>
+        <span class="period-annual" style="display:none">per year</span>
+      </div>
+      <div class="price-save save-annual" style="display:none">2 months free</div>
+      <div class="price-save save-monthly">&nbsp;</div>
+    </div>
+    <a class="card-cta cta-secondary" href="/register">Start free trial</a>
+    <div class="limits">
+      <div class="limit-row"><span class="limit-label">Apps / repos</span><span class="limit-val">10</span></div>
+      <div class="limit-row"><span class="limit-label">Scans / month</span><span class="limit-val">500</span></div>
+      <div class="limit-row"><span class="limit-label">History</span><span class="limit-val">30 days</span></div>
+      <div class="limit-row"><span class="limit-label">Users</span><span class="limit-val">1</span></div>
+    </div>
+    <ul class="features">
+      <li class="feat-section">Everything in Free, plus</li>
+      <li><span class="check">✓</span> 10 private apps</li>
+      <li><span class="check">✓</span> Central dashboard</li>
+      <li><span class="check">✓</span> CVE search across apps</li>
+      <li><span class="check">✓</span> SBOM diff</li>
+      <li><span class="check">✓</span> License policy check</li>
+      <li><span class="check">✓</span> Vuln alert emails</li>
+      <li><span class="check">✓</span> Server-side repo scanning</li>
+      <li><span class="check">✓</span> Email support</li>
+      <li><span class="check-muted">—</span> <span style="color:var(--muted)">PR gate enforcement</span></li>
+    </ul>
+  </div>
+
+  <!-- Team -->
+  <div class="card featured">
+    <div class="popular-badge">Most popular</div>
+    <div class="tier-name">Team</div>
+    <div class="tier-tagline">Protect every PR</div>
+    <div class="price-wrap">
+      <div class="price price-monthly"><sub>$</sub>99</div>
+      <div class="price price-annual" style="display:none"><sub>$</sub>990</div>
+      <div class="price-period">
+        <span class="period-monthly">per month</span>
+        <span class="period-annual" style="display:none">per year</span>
+      </div>
+      <div class="price-save save-annual" style="display:none">2 months free</div>
+      <div class="price-save save-monthly">&nbsp;</div>
+    </div>
+    <a class="card-cta cta-primary" href="/register">Start free trial</a>
+    <div class="limits">
+      <div class="limit-row"><span class="limit-label">Apps / repos</span><span class="limit-val">50</span></div>
+      <div class="limit-row"><span class="limit-label">Scans / month</span><span class="limit-val">5,000</span></div>
+      <div class="limit-row"><span class="limit-label">History</span><span class="limit-val">180 days</span></div>
+      <div class="limit-row"><span class="limit-label">Users</span><span class="limit-val">5</span></div>
+    </div>
+    <ul class="features">
+      <li class="feat-section">Everything in Starter, plus</li>
+      <li><span class="check">✓</span> PR gate — block merges on new criticals</li>
+      <li><span class="check">✓</span> GitHub Action central tracking</li>
+      <li><span class="check">✓</span> Dockerfile audit + base image CVEs</li>
+      <li><span class="check">✓</span> Scoped API keys per member</li>
+      <li><span class="check">✓</span> Slack / webhook alerts</li>
+      <li><span class="check">✓</span> Priority email support</li>
+      <li><span class="check-muted">—</span> <span style="color:var(--muted)">AI remediation advice</span></li>
+      <li><span class="check-muted">—</span> <span style="color:var(--muted)">Compliance reports</span></li>
+    </ul>
+  </div>
+
+  <!-- Business -->
+  <div class="card">
+    <div class="tier-name">Business</div>
+    <div class="tier-tagline">Manage organizational exposure</div>
+    <div class="price-wrap">
+      <div class="price price-monthly"><sub>$</sub>299</div>
+      <div class="price price-annual" style="display:none"><sub>$</sub>2,990</div>
+      <div class="price-period">
+        <span class="period-monthly">per month</span>
+        <span class="period-annual" style="display:none">per year</span>
+      </div>
+      <div class="price-save save-annual" style="display:none">2 months free</div>
+      <div class="price-save save-monthly">&nbsp;</div>
+    </div>
+    <a class="card-cta cta-secondary" href="/register">Start free trial</a>
+    <div class="limits">
+      <div class="limit-row"><span class="limit-label">Apps / repos</span><span class="limit-val">250</span></div>
+      <div class="limit-row"><span class="limit-label">Scans / month</span><span class="limit-val">25,000</span></div>
+      <div class="limit-row"><span class="limit-label">History</span><span class="limit-val">1 year</span></div>
+      <div class="limit-row"><span class="limit-label">Users</span><span class="limit-val">20</span></div>
+    </div>
+    <ul class="features">
+      <li class="feat-section">Everything in Team, plus</li>
+      <li><span class="check">✓</span> AI remediation advice</li>
+      <li><span class="check">✓</span> VEX management</li>
+      <li><span class="check">✓</span> Compliance reports</li>
+      <li><span class="check">✓</span> API access</li>
+      <li><span class="check">✓</span> Cross-app risk dashboard</li>
+      <li><span class="check">✓</span> Client / report exports</li>
+      <li><span class="check">✓</span> Custom alert thresholds</li>
+      <li><span class="check">✓</span> Priority support</li>
+    </ul>
+  </div>
+
+  <!-- Enterprise -->
+  <div class="card">
+    <div class="tier-name">Enterprise</div>
+    <div class="tier-tagline">Govern supply-chain risk at scale</div>
+    <div class="price-wrap">
+      <div class="price" style="font-size:24px;letter-spacing:-0.3px">Custom</div>
+      <div class="price-period">starting at $10k / year</div>
+      <div class="price-save">&nbsp;</div>
+    </div>
+    <a class="card-cta cta-enterprise" href="mailto:hello@packrai.com">Contact sales</a>
+    <div class="limits">
+      <div class="limit-row"><span class="limit-label">Apps / repos</span><span class="limit-val accent">Unlimited</span></div>
+      <div class="limit-row"><span class="limit-label">Scans / month</span><span class="limit-val accent">Unlimited</span></div>
+      <div class="limit-row"><span class="limit-label">History</span><span class="limit-val accent">Custom</span></div>
+      <div class="limit-row"><span class="limit-label">Users</span><span class="limit-val accent">Unlimited</span></div>
+    </div>
+    <ul class="features">
+      <li class="feat-section">Everything in Business, plus</li>
+      <li><span class="check">✓</span> SSO / SAML + SCIM</li>
+      <li><span class="check">✓</span> Audit logs</li>
+      <li><span class="check">✓</span> On-prem / self-hosted</li>
+      <li><span class="check">✓</span> SLA + dedicated CSM</li>
+      <li><span class="check">✓</span> Custom retention policies</li>
+      <li><span class="check">✓</span> Private Slack channel</li>
+      <li><span class="check">✓</span> Security review + BAA</li>
+      <li><span class="check">✓</span> Procurement support</li>
+    </ul>
+  </div>
+
+</div>
+
+<!-- Outcome strip -->
+<div class="outcomes">
+  <h2>What teams actually use this for</h2>
+  <div class="outcome-grid">
+    <div class="outcome-card"><p>Find every app exposed to a CVE.</p></div>
+    <div class="outcome-card"><p>Block risky dependency changes before merge.</p></div>
+    <div class="outcome-card"><p>Know exactly what changed between releases.</p></div>
+    <div class="outcome-card"><p>Generate auditor-ready SBOM reports.</p></div>
+    <div class="outcome-card"><p>Prioritize actively exploited vulnerabilities.</p></div>
+  </div>
+</div>
+
+<!-- FAQ -->
+<div class="faq">
+  <h2>Frequently asked questions</h2>
+
+  <div class="faq-item">
+    <button class="faq-q">What counts as an "app" or "repo"?<span class="faq-chevron">⌄</span></button>
+    <div class="faq-a">One app is one named project — typically one repository. Multiple branches or versions of the same repo count as one app. The CLI and GitHub Action can scan unlimited repos locally; the limit only applies to apps tracked in the hosted dashboard.</div>
+  </div>
+
+  <div class="faq-item">
+    <button class="faq-q">Is the CLI and GitHub Action always free?<span class="faq-chevron">⌄</span></button>
+    <div class="faq-a">Yes. The CLI and GitHub Action are open source and free for local generation and export. Paid plans add hosted ingestion, central tracking, history, alerts, and team features via the API.</div>
+  </div>
+
+  <div class="faq-item">
+    <button class="faq-q">What ecosystems are supported?<span class="faq-chevron">⌄</span></button>
+    <div class="faq-a">npm (package-lock.json, yarn.lock), Python (Pipfile.lock, poetry.lock), Rust (Cargo.lock), and Go (go.sum). Docker image base-layer auditing is also included. More ecosystems are in progress — check the docs for the latest.</div>
+  </div>
+
+  <div class="faq-item">
+    <button class="faq-q">How does the PR gate work?<span class="faq-chevron">⌄</span></button>
+    <div class="faq-a">Add the PackrAI GitHub Action to your workflow. On each PR it generates an SBOM and diffs it against the base branch. If new critical CVEs are introduced, the check fails and the merge is blocked. You control the threshold (critical-only, or critical + high). Available on Team and above.</div>
+  </div>
+
+  <div class="faq-item">
+    <button class="faq-q">What happens if I exceed my plan limits?<span class="faq-chevron">⌄</span></button>
+    <div class="faq-a">You'll get an email heads-up before you hit limits, and a prompt to upgrade in the dashboard. We don't cut off access or delete data without warning. Hard blocks only apply to clear abuse cases.</div>
+  </div>
+
+  <div class="faq-item">
+    <button class="faq-q">Do paid plans include a free trial?<span class="faq-chevron">⌄</span></button>
+    <div class="faq-a">Yes — 14 days free on Starter, Team, and Business. No credit card required for Free or for the trial. Business trials are also available on request via sales.</div>
+  </div>
+
+  <div class="faq-item">
+    <button class="faq-q">Can I cancel or change plans at any time?<span class="faq-chevron">⌄</span></button>
+    <div class="faq-a">Yes. Monthly plans can be cancelled any time — access continues until the end of the billing period. Annual plans are non-refundable after 30 days but can be upgraded at any time with prorated credit applied.</div>
+  </div>
+
+  <div class="faq-item">
+    <button class="faq-q">Do you have discounts for open-source projects?<span class="faq-chevron">⌄</span></button>
+    <div class="faq-a">Yes. Approved open-source projects can apply for a free plan with expanded limits. Email <a href="mailto:hello@packrai.com" style="color:var(--blue)">hello@packrai.com</a> with a link to your repo.</div>
+  </div>
+
+</div>
+
+<footer>
+  <a href="/">PackrAI</a>
+  <a href="/docs">Docs</a>
+  <a href="/register">Get started</a>
+  <a href="/terms">Terms</a>
+  <a href="/privacy">Privacy</a>
+  <a href="mailto:hello@packrai.com">Contact</a>
+</footer>
+
+<script>
+function setBilling(mode) {
+  const annual = mode === 'annual';
+  document.getElementById('btn-monthly').classList.toggle('active', !annual);
+  document.getElementById('btn-annual').classList.toggle('active', annual);
+  document.querySelectorAll('.price-monthly').forEach(el  => el.style.display = annual ? 'none' : '');
+  document.querySelectorAll('.price-annual').forEach(el   => el.style.display = annual ? '' : 'none');
+  document.querySelectorAll('.period-monthly').forEach(el => el.style.display = annual ? 'none' : '');
+  document.querySelectorAll('.period-annual').forEach(el  => el.style.display = annual ? '' : 'none');
+  document.querySelectorAll('.save-monthly').forEach(el   => el.style.display = annual ? 'none' : '');
+  document.querySelectorAll('.save-annual').forEach(el    => el.style.display = annual ? '' : 'none');
+}
+
+document.querySelectorAll('.faq-q').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const item    = btn.closest('.faq-item');
+    const wasOpen = item.classList.contains('open');
+    document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
+    if (!wasOpen) item.classList.add('open');
+  });
+});
+</script>
+</body>
+</html>
