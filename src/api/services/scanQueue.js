@@ -4,7 +4,9 @@ const db = require('../db');
 
 async function enqueueScanJob(orgId, repo, ref) {
     const { rows } = await db.query(
-        `INSERT INTO scan_jobs (org_id, repo, ref) VALUES ($1, $2, $3) RETURNING id`,
+        `INSERT INTO scan_jobs (org_id, repo, ref, timeout_at)
+         VALUES ($1, $2, $3, NOW() + INTERVAL '3 minutes')
+         RETURNING id`,
         [orgId, repo, ref]
     );
     return rows[0].id;
@@ -12,7 +14,7 @@ async function enqueueScanJob(orgId, repo, ref) {
 
 async function countActiveScansForOrg(orgId) {
     const { rows } = await db.query(
-        `SELECT COUNT(*) AS cnt FROM scan_jobs WHERE org_id = $1 AND status = 'running'`,
+        `SELECT COUNT(*) AS cnt FROM scan_jobs WHERE org_id = $1 AND status IN ('pending', 'running')`,
         [orgId]
     );
     return Number(rows[0].cnt);
@@ -58,12 +60,26 @@ async function markScanFailed(jobId, error) {
 
 async function recoverStaleJobs(timeoutMs) {
     const timeoutSecs = Math.ceil(timeoutMs / 1000);
+
+    // Reset jobs that still have retries left
     await db.query(
         `UPDATE scan_jobs
-         SET status = 'failed', error = 'Worker timed out or crashed',
-             finished_at = NOW(), updated_at = NOW()
+         SET status = 'pending', locked_by = NULL, locked_at = NULL,
+             updated_at = NOW(), error = 'Recovered from stale worker lock'
          WHERE status = 'running'
-           AND locked_at < NOW() - ($1 || ' seconds')::interval`,
+           AND locked_at < NOW() - ($1 || ' seconds')::interval
+           AND attempts < max_attempts`,
+        [timeoutSecs]
+    );
+
+    // Permanently fail jobs that have exhausted attempts
+    await db.query(
+        `UPDATE scan_jobs
+         SET status = 'failed', finished_at = NOW(), updated_at = NOW(),
+             error = COALESCE(error, 'Max attempts exceeded')
+         WHERE status = 'running'
+           AND locked_at < NOW() - ($1 || ' seconds')::interval
+           AND attempts >= max_attempts`,
         [timeoutSecs]
     );
 }
