@@ -17,7 +17,7 @@
 npx packrai RunTimeAdmin/myapp@v2.1.0
 ```
 
-Produces **CycloneDX 1.6** and **SPDX 2.3** in under 500ms. No Docker. No agents. No config files.
+Produces **CycloneDX 1.6**, **SPDX 2.3**, and an **AI Bill of Materials** in under 500ms. No Docker. No agents. No config files.
 
 ---
 
@@ -134,6 +134,122 @@ Lock files are the resolved dependency graph — authoritative, deterministic, a
 | `BurntSushi/ripgrep` | Rust | **268ms** | 11 823ms | 15 425ms |
 
 Syft and Trivy run via Docker in this benchmark, adding ~3–5s of startup overhead. Native installs would be somewhat faster — but still an order of magnitude slower on lock-file repos. Reproduce with `npm run bench`.
+
+---
+
+## AI Bill of Materials (AI-BOM)
+
+PackrAI extends its SBOM pipeline with a full **AI Bill of Materials** — a signed, hash-chained attestation covering every layer of an AI/ML project. Runs automatically alongside the SBOM scan; no extra flags required for basic detection.
+
+```bash
+npx packrai .                          # auto-detects AI components
+npx packrai . --no-aibom              # skip AI-BOM if not needed
+npx packrai . --no-aibom-enrich       # local detection only, no HuggingFace Hub calls
+```
+
+Output files:
+```
+bom.cyclonedx.json   ← SBOM + AI components embedded (modelCard, datasets, compositions)
+bom.spdx.json        ← standard SPDX output
+aibom.json           ← standalone AI-BOM attestation (lineage, signature, compliance)
+```
+
+### Pillar 1 — Model Provenance
+Detects model weights (`*.safetensors`, `*.gguf`, `*.onnx`, `*.bin`), computes **streaming SHA-256** hashes (up to 2 GB per file), and reads `config.json` to extract architecture, parameter count, context length, and precision. HuggingFace model IDs found in Python source files and environment variables are resolved via the Hub API for commit-level provenance.
+
+```json
+{
+  "type": "machine-learning-model",
+  "name": "meta-llama/Llama-3.1-8B",
+  "purl": "pkg:huggingface/meta-llama/Llama-3.1-8B@main",
+  "hashes": [
+    { "alg": "SHA-256", "content": "a3f9..." },
+    { "alg": "SHA-1",   "content": "d4c2..." }
+  ],
+  "modelCard": {
+    "modelParameters": {
+      "architectureFamily": "Transformer",
+      "modelArchitecture": "Decoder-only LLM",
+      "task": { "type": "natural-language-processing" },
+      "datasets": [{ "bom-ref": "pkg:huggingface/dataset/allenai/c4@unknown" }]
+    }
+  }
+}
+```
+
+### Pillar 2 — Data Lineage
+Datasets referenced in `config.json`, HuggingFace model cards, and Hub metadata become standalone `type: data` components with HuggingFace PURLs and governance records. The `modelCard.modelParameters.datasets` array links to them by `bom-ref` — no duplicated metadata.
+
+```json
+{
+  "type": "data",
+  "name": "allenai/c4",
+  "purl": "pkg:huggingface/dataset/allenai/c4@unknown",
+  "data": [{
+    "type": "dataset",
+    "contents": { "url": "https://huggingface.co/datasets/allenai/c4" },
+    "governance": { "owners": [{ "contact": { "name": "allenai" } }] }
+  }]
+}
+```
+
+### Pillar 3 — Infrastructure & Frameworks
+50+ AI/ML Python packages (PyTorch, TensorFlow, JAX, Transformers, vLLM, LangChain, LlamaIndex, etc.) are classified by role (`training-framework`, `inference-engine`, `orchestration`, `vector-store`, and more). Detected versions are captured directly from the lock file — no runtime required.
+
+### Pillar 4 — Agentic Context (MCP)
+Scans for MCP server configurations (`.cursor/mcp.json`, `.vscode/mcp.json`, `mcp.json`, etc.) and system prompt files (`CLAUDE.md`, `.cursorrules`, `.clinerules`, `*.prompt`, `*.prompty`). Each MCP server is analysed for:
+
+| Flag | Threat |
+|------|--------|
+| `shellAccess` | Command execution capability → `AI-009 EXCESSIVE_AGENCY` |
+| `broadFilesystem` | Root-level path access → `AI-009 EXCESSIVE_AGENCY` |
+| `unpinnedSource` | `npx -y` or unversioned package → `AI-010 UNPINNED_MCP` |
+| Remote transport (SSE/HTTP) without auth | `AI-011 UNAUTHENTICATED_REMOTE` |
+| Prompt files present | `AI-012 PROMPT_TAMPERING` (hash-locked) |
+
+A **Least Agency Score** (0–100) is computed from the aggregate authority surface and included in the scan summary.
+
+### Pillar 5 — Governance & Compliance
+`aibom.json` includes a **compliance assessment** mapped to:
+
+| Control | Standard | Satisfied when |
+|---------|----------|----------------|
+| `ISO42001:A.6.1.1` | ISO/IEC 42001:2023 | AI components inventoried |
+| `ISO42001:A.6.2.6` | ISO/IEC 42001:2023 | Training data documented |
+| `ISO42001:A.6.2.8` | ISO/IEC 42001:2023 | Agentic authority scope declared |
+| `EUAIACT:Art53.1a` | EU AI Act Art. 53 | Model architecture documented |
+| `EUAIACT:Art53.1c` | EU AI Act Art. 53 | Dataset licenses inventoried |
+| `EUAIACT:Art53.1d` | EU AI Act Art. 53 | Training datasets listed |
+
+### Hash-Chained Lineage
+Every AI-BOM includes a tamper-evident chain linking stages from base model through fine-tune → quantize → evaluation → package → deploy. Each record carries a `prevHash` and a `recordHash` (SHA-256 of the canonicalised content), detectable by `verifyAIBomDocument()`.
+
+### Cryptographic Signing
+AI-BOMs can be signed with Ed25519 (always available) and optionally **ML-DSA-65 / SLH-DSA** (post-quantum, requires OpenSSL 3.5+). The signature uses JSON Signature Format (JSF) over RFC 8785 canonicalised content and is attached to the CycloneDX `signature` field. When PQC is unavailable, the document honestly records `pqc: { status: "unavailable", reason: "..." }` rather than silently omitting it.
+
+```bash
+# Pass signing keys via environment or config
+PACKRAI_SIGNING_KEY=./ed25519.pem npx packrai .
+```
+
+### Threat Detection
+| ID | Threat | Trigger |
+|----|--------|---------|
+| `AI-001` | `UNSAFE_PICKLE` | `.pkl`/`.pickle` weight files |
+| `AI-002` | `UNSAFE_SAFETENSORS` | safetensors format issues |
+| `AI-003` | `NO_PROVENANCE` | no Hub metadata resolvable |
+| `AI-004` | `ADVERSARIAL_INPUT` | adversarial-robustness packages present |
+| `AI-005` | `DATA_POISONING` | no training data documented |
+| `AI-006` | `COMPROMISED_PRETRAINED` | no integrity hash on weights |
+| `AI-007` | `RESTRICTED_LICENSE` | dataset under non-commercial license |
+| `AI-008` | `TELEMETRY_EXFIL` | analytics/telemetry packages detected |
+| `AI-009` | `EXCESSIVE_AGENCY` | MCP shell or broad filesystem access |
+| `AI-010` | `UNPINNED_MCP` | MCP server without pinned version |
+| `AI-011` | `UNAUTHENTICATED_REMOTE` | remote MCP transport, no auth |
+| `AI-012` | `PROMPT_TAMPERING` | prompt files detected (hash-locked) |
+
+### CycloneDX 1.7 opt-in
+The default output is CycloneDX **1.6** for maximum toolchain compatibility. Pass `specVersion: '1.7'` in the API or `--spec-version 1.7` on the CLI to enable the full 1.7 ML-BOM `modelCard` schema including `quantitativeAnalysis` and richer `considerations`.
 
 ---
 
