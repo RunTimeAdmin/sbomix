@@ -126,6 +126,40 @@ Get an API key at [api.packrai.xyz/register](https://api.packrai.xyz/register).`
       Error: {
         type: "object",
         properties: { error: { type: "string" } }
+      },
+      ScanJob: {
+        type: "object",
+        properties: {
+          id:                 { type: "string", format: "uuid" },
+          repo:               { type: "string", example: "psf/requests" },
+          ref:                { type: "string", nullable: true },
+          status:             { type: "string", enum: ["pending", "running", "done", "failed"] },
+          error:              { type: "string", nullable: true },
+          app_name:           { type: "string", nullable: true },
+          sbom_id:            { type: "string", format: "uuid", nullable: true },
+          ai_models:          { type: "integer", nullable: true, description: "AI model components detected" },
+          ai_threats:         { type: "integer", nullable: true },
+          ai_critical:        { type: "integer", nullable: true },
+          least_agency_score: { type: "integer", nullable: true, description: "MCP authority score 0-100" },
+          created_at:         { type: "string", format: "date-time" },
+          updated_at:         { type: "string", format: "date-time" }
+        }
+      },
+      VexStatement: {
+        type: "object",
+        properties: {
+          id:               { type: "string", format: "uuid" },
+          component_id:     { type: "string", format: "uuid" },
+          purl:             { type: "string" },
+          component_name:   { type: "string" },
+          version:          { type: "string" },
+          osv_id:           { type: "string" },
+          status:           { type: "string" },
+          justification:    { type: "string", nullable: true },
+          impact_statement: { type: "string", nullable: true },
+          created_at:       { type: "string", format: "date-time" },
+          updated_at:       { type: "string", format: "date-time" }
+        }
       }
     }
   },
@@ -138,7 +172,10 @@ Get an API key at [api.packrai.xyz/register](https://api.packrai.xyz/register).`
     { name: "Search",     description: "Cross-org CVE exposure search" },
     { name: "Report",     description: "Org-wide risk summary" },
     { name: "Keys",       description: "API key management (org:admin)" },
-    { name: "AI-BOM",     description: "AI Bill of Materials — returned inline on ingest and downloadable via SBOM download" }
+    { name: "AI-BOM",     description: "AI Bill of Materials — returned inline on ingest and downloadable via SBOM download" },
+    { name: "Scan",       description: "Async repo scan jobs — submit a GitHub repo, poll for completion" },
+    { name: "VEX",        description: "Vulnerability Exploitability eXchange — suppress or classify known findings" },
+    { name: "Billing",    description: "Plan and subscription info (org:admin scope)" }
   ],
   paths: {
 
@@ -473,6 +510,137 @@ Get an API key at [api.packrai.xyz/register](https://api.packrai.xyz/register).`
           "200": { description: "Key revoked", content: { "application/json": { schema: { type: "object", properties: { revoked: { type: "boolean" } } } } } },
           "403": { description: "org:admin scope required" },
           "404": { description: "Key not found" }
+        }
+      }
+    }
+  },
+    "/api/v1/scan": {
+      post: {
+        tags: ["Scan"],
+        summary: "Submit an async GitHub repo scan",
+        description: "Clones a GitHub repository and runs the full PackrAI pipeline asynchronously. Poll GET /api/v1/scan/:jobId for status. Results are automatically ingested.",
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: {
+            type: "object", required: ["repo"],
+            properties: {
+              repo:  { type: "string", example: "psf/requests", description: "owner/repo or owner/repo@branch" },
+              token: { type: "string", description: "GitHub token for private repos" }
+            }
+          }}}
+        },
+        responses: {
+          "202": { description: "Scan job queued",
+            content: { "application/json": { schema: { type: "object", properties: {
+              jobId: { type: "string", format: "uuid" }
+            }}}}
+          },
+          "400": { description: "Invalid repo or plan limit reached" },
+          "401": { description: "Unauthorised" }
+        }
+      },
+      get: {
+        tags: ["Scan"],
+        summary: "List recent scan jobs for the org (most recent 20)",
+        responses: {
+          "200": { description: "Scan job list",
+            content: { "application/json": { schema: { type: "object", properties: {
+              jobs: { type: "array", items: { "$ref": "#/components/schemas/ScanJob" } }
+            }}}}
+          }
+        }
+      }
+    },
+
+    "/api/v1/scan/{jobId}": {
+      get: {
+        tags: ["Scan"],
+        summary: "Poll a scan job for status and results",
+        parameters: [{ name: "jobId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        responses: {
+          "200": { description: "Scan job detail including AI-BOM stats once done",
+            content: { "application/json": { schema: { "$ref": "#/components/schemas/ScanJob" } } }
+          },
+          "404": { description: "Job not found" }
+        }
+      }
+    },
+
+    "/api/v1/vex": {
+      post: {
+        tags: ["VEX"],
+        summary: "Create or update a VEX statement",
+        description: "Upserts a VEX statement for a component/vulnerability pair. not_affected statements suppress findings from risk reports and SBOM diff.",
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: {
+            type: "object", required: ["component_id", "osv_id", "status"],
+            properties: {
+              component_id:     { type: "string", format: "uuid", description: "UUID from /components" },
+              osv_id:           { type: "string", example: "GHSA-jfh8-c2jp-hdp8" },
+              status:           { type: "string", enum: ["not_affected", "affected", "fixed", "under_investigation"] },
+              justification:    { type: "string", enum: ["component_not_present", "vulnerable_code_not_present", "vulnerable_code_cannot_be_controlled_by_adversary", "vulnerable_code_not_in_execute_path", "inline_mitigations_already_exist"] },
+              impact_statement: { type: "string" }
+            }
+          }}}
+        },
+        responses: {
+          "201": { description: "VEX statement created or updated",
+            content: { "application/json": { schema: { "$ref": "#/components/schemas/VexStatement" } } }
+          },
+          "400": { description: "Validation error" },
+          "404": { description: "Component not found in this org" }
+        }
+      },
+      get: {
+        tags: ["VEX"],
+        summary: "List VEX statements for the org",
+        parameters: [
+          { name: "osv_id", in: "query", schema: { type: "string" }, description: "Filter by vulnerability ID" },
+          { name: "component_id", in: "query", schema: { type: "string", format: "uuid" }, description: "Filter by component" }
+        ],
+        responses: {
+          "200": { description: "VEX statements",
+            content: { "application/json": { schema: { type: "object", properties: {
+              statements: { type: "array", items: { "$ref": "#/components/schemas/VexStatement" } }
+            }}}}
+          }
+        }
+      }
+    },
+
+    "/api/v1/vex/{id}": {
+      delete: {
+        tags: ["VEX"],
+        summary: "Revoke a VEX statement",
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        responses: {
+          "200": { description: "Revoked", content: { "application/json": { schema: { type: "object", properties: { revoked: { type: "boolean" } } } } } },
+          "404": { description: "Statement not found" }
+        }
+      }
+    },
+
+    "/api/v1/billing": {
+      get: {
+        tags: ["Billing"],
+        summary: "Get current plan, subscription status, and limits",
+        responses: {
+          "200": { description: "Billing info",
+            content: { "application/json": { schema: { type: "object", properties: {
+              plan:               { type: "string", enum: ["free", "starter", "team", "business", "enterprise"] },
+              status:             { type: "string", nullable: true },
+              current_period_end: { type: "string", format: "date-time", nullable: true },
+              has_payment_method: { type: "boolean" },
+              limits: { type: "object", properties: {
+                apps:          { type: "integer" },
+                scansPerMonth: { type: "integer" },
+                seats:         { type: "integer" },
+                retentionDays: { type: "integer" }
+              }}
+            }}}}
+          },
+          "403": { description: "org:admin scope required" }
         }
       }
     }

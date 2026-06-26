@@ -294,6 +294,55 @@ async function sendVulnAlertIfNew(orgId, appId, appName) {
     }
 }
 
+async function sendScanCompleteEmail(orgId, appName, stats, commitSha) {
+    try {
+        const orgRes = await db.query('SELECT email FROM organizations WHERE id = $1', [orgId]);
+        const email  = orgRes.rows[0]?.email;
+        if (!email) return;
+
+        const hasAI   = (stats?.aiModels ?? 0) > 0;
+        const vulns   = stats?.vulnerabilities ?? 0;
+        const crits   = stats?.critical ?? 0;
+        const quality = stats?.qualityScore ?? null;
+        const commit  = commitSha ? commitSha.slice(0, 7) : null;
+
+        const vulnColor  = vulns  > 0 ? '#e3b341' : '#3fb950';
+        const threatColor = (stats?.aiThreats ?? 0) > 0 ? '#f85149' : '#3fb950';
+        const aiRow = hasAI ? [
+            '<tr><td colspan="2" style="padding:10px 20px;background:#161b22;border-top:1px solid #30363d;color:#58a6ff;font-weight:600">AI Bill of Materials</td></tr>',
+            '<tr><td style="padding:5px 20px;color:#8b949e">AI models detected</td><td style="padding:5px 20px;text-align:right">' + (stats.aiModels ?? 0) + '</td></tr>',
+            '<tr><td style="padding:5px 20px;color:#8b949e">AI-BOM threats</td><td style="padding:5px 20px;text-align:right;color:' + threatColor + '">' + (stats.aiThreats ?? 0) + '</td></tr>',
+            stats.leastAgencyScore != null ? '<tr><td style="padding:5px 20px;color:#8b949e">Least Agency Score</td><td style="padding:5px 20px;text-align:right">' + stats.leastAgencyScore + '/100</td></tr>' : '',
+        ].join('') : '';
+
+        const qualityRow = quality != null
+            ? '<tr><td style="padding:5px 20px;color:#8b949e">Quality score</td><td style="padding:5px 20px;text-align:right">' + quality + '/100</td></tr>'
+            : '';
+
+        const vulnLabel = vulns + (crits > 0 ? ' (' + crits + ' critical)' : '');
+
+        await sendEmail({
+            to: email,
+            subject: '[PackrAI] Scan complete — ' + appName + (commit ? ' @' + commit : ''),
+            html: '<!DOCTYPE html><html><body style="background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;padding:40px;max-width:600px;margin:0 auto">'
+                + '<p style="color:#3fb950;font-size:12px;font-weight:700;letter-spacing:1px;margin-bottom:8px">SCAN COMPLETE</p>'
+                + '<h1 style="font-size:22px;font-weight:700;margin:0 0 20px">' + appName + '</h1>'
+                + '<table style="width:100%;border-collapse:collapse;background:#161b22;border:1px solid #30363d;border-radius:8px;overflow:hidden;margin-bottom:24px">'
+                + '<tr><td style="padding:6px 20px;color:#8b949e">Components</td><td style="padding:6px 20px;text-align:right">' + (stats?.totalComponents ?? 0) + '</td></tr>'
+                + '<tr><td style="padding:6px 20px;color:#8b949e">Vulnerabilities</td><td style="padding:6px 20px;text-align:right;color:' + vulnColor + '">' + vulnLabel + '</td></tr>'
+                + qualityRow
+                + aiRow
+                + '</table>'
+                + '<p style="margin-bottom:24px;color:#8b949e;font-size:13px">Vulnerability enrichment is running in the background — check your dashboard in a minute for the full CVE picture.</p>'
+                + '<a href="https://api.packrai.xyz/dashboard" style="background:#238636;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px">View in Dashboard →</a>'
+                + '<p style="margin-top:32px;color:#8b949e;font-size:11px">PackrAI · <a href="https://packrai.xyz" style="color:#58a6ff">packrai.xyz</a></p>'
+                + '</body></html>',
+        });
+    } catch (err) {
+        console.error('[scan-email]', err.message);
+    }
+}
+
 // ── API key helpers ───────────────────────────────────────────────────────────
 function hashApiKey(key) {
     return crypto.createHmac('sha256', process.env.HMAC_SECRET).update(key).digest('hex');
@@ -936,6 +985,9 @@ async function runScanJob(jobId, orgId, repo, ref, token) {
             [jobId, appName, sbomId]
         );
 
+        // Scan completion email — fires immediately with static results
+        sendScanCompleteEmail(orgId, appName, result.stats, cloned.commitSha).catch(() => {});
+
         // Fire OSV enrichment + alerts async (same as normal ingest)
         if (purlToCompId.size > 0) {
             osvEnrichAsync(orgId, result.cyclonedx.components.filter(c => c.purl), purlToCompId)
@@ -1050,7 +1102,13 @@ app.post('/api/v1/ingest', ingestLimiter, requireScope('sbom:ingest'), async (re
             executeIngestTx(client, req.org.id, appName, { version, commit, branch, cyclonedx, spdx, stats, aibom })
         );
 
-        res.status(201).json({ sbomId });
+        res.status(201).json({
+            sbomId,
+            aiModels:        stats?.aiModels        ?? 0,
+            aiThreats:       stats?.aiThreats       ?? 0,
+            aiCritical:      stats?.aiCritical      ?? 0,
+            leastAgencyScore: stats?.leastAgencyScore ?? null,
+        });
 
         // Fire-and-forget OSV enrichment when payload had no vulnerability data
         if (!cyclonedx.vulnerabilities?.length && purlToCompId.size > 0) {
@@ -1140,7 +1198,8 @@ app.get('/api/v1/apps/:name/sbom', requireScope('sbom:read'), async (req, res) =
         const { rows } = await db.query(
             `SELECT s.id, s.version, s.commit_sha, s.branch, s.component_count,
                     s.vulnerability_count, s.critical_count, s.quality_score,
-                    s.ecosystems, s.elapsed_ms, s.created_at
+                    s.ecosystems, s.elapsed_ms, s.created_at,
+                    s.ai_models, s.ai_threats, s.ai_critical, s.least_agency_score
              FROM sboms s
              JOIN applications a ON a.id = s.app_id
              WHERE a.org_id = $1 AND a.name = $2

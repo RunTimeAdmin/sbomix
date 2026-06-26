@@ -8,6 +8,7 @@ COPY src/api/package*.json ./src/api/
 RUN npm ci --omit=dev --prefix ./src/api
 
 FROM node:20-alpine
+RUN apk add --no-cache git
 WORKDIR /app
 COPY --from=deps /app/node_modules        ./node_modules
 COPY --from=deps /app/src/api/node_modules ./src/api/node_modules
