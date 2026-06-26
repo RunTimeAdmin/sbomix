@@ -739,7 +739,7 @@ app.post('/api/v1/resend-key', resendKeyLimiter, async (req, res) => {
 
 // ── Shared ingest transaction ─────────────────────────────────────────────────
 // Called from both the HTTP ingest route and the server-side scan job runner.
-async function executeIngestTx(client, orgId, appName, { version, commit, branch, cyclonedx, spdx, stats }) {
+async function executeIngestTx(client, orgId, appName, { version, commit, branch, cyclonedx, spdx, stats, aibom }) {
     const appRes = await client.query(
         `INSERT INTO applications (org_id, name)
          VALUES ($1, $2)
@@ -751,20 +751,25 @@ async function executeIngestTx(client, orgId, appName, { version, commit, branch
 
     const sbomRes = await client.query(
         `INSERT INTO sboms
-           (app_id, org_id, version, commit_sha, branch, cyclonedx, spdx,
+           (app_id, org_id, version, commit_sha, branch, cyclonedx, spdx, aibom,
             component_count, vulnerability_count, critical_count,
-            quality_score, ecosystems, elapsed_ms, generated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
+            quality_score, ecosystems, elapsed_ms,
+            ai_models, ai_threats, ai_critical, least_agency_score, generated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NOW())
          RETURNING id`,
         [
             appId, orgId, version, commit, branch,
-            cyclonedx, spdx || null,
+            cyclonedx, spdx || null, aibom ? JSON.stringify(aibom) : null,
             stats?.totalComponents ?? 0,
             stats?.vulnerabilities ?? 0,
             stats?.critical ?? 0,
             stats?.qualityScore ?? null,
             stats?.ecosystems ?? [],
             stats?.elapsedMs ?? null,
+            stats?.aiModels    ?? 0,
+            stats?.aiThreats   ?? 0,
+            stats?.aiCritical  ?? 0,
+            stats?.leastAgencyScore ?? null,
         ]
     );
     const sbomId = sbomRes.rows[0].id;
@@ -922,6 +927,7 @@ async function runScanJob(jobId, orgId, repo, ref, token) {
                 cyclonedx: result.cyclonedx,
                 spdx:      result.spdx,
                 stats:     result.stats,
+                aibom:     result.aiBom || null,
             })
         );
 
@@ -959,7 +965,7 @@ async function runScanJob(jobId, orgId, repo, ref, token) {
 // POST /api/v1/ingest
 // Body: { app, version, commit, branch, cyclonedx, spdx, stats }
 app.post('/api/v1/ingest', ingestLimiter, requireScope('sbom:ingest'), async (req, res) => {
-    const { app: appName, version, commit, branch, cyclonedx, spdx, stats } = req.body;
+    const { app: appName, version, commit, branch, cyclonedx, spdx, stats, aibom } = req.body;
 
     // ── Plan limit check ──────────────────────────────────────────────────────
     try {
@@ -1041,7 +1047,7 @@ app.post('/api/v1/ingest', ingestLimiter, requireScope('sbom:ingest'), async (re
 
     try {
         const { sbomId, purlToCompId, appId } = await db.tx((client) =>
-            executeIngestTx(client, req.org.id, appName, { version, commit, branch, cyclonedx, spdx, stats })
+            executeIngestTx(client, req.org.id, appName, { version, commit, branch, cyclonedx, spdx, stats, aibom })
         );
 
         res.status(201).json({ sbomId });
@@ -1677,8 +1683,12 @@ app.get('/api/v1/scan', requireScope('sbom:read'), async (req, res) => {
 app.get('/api/v1/scan/:jobId', requireScope('sbom:read'), async (req, res) => {
     try {
         const { rows } = await db.query(
-            `SELECT id, repo, ref, status, error, app_name, sbom_id, created_at, updated_at
-             FROM scan_jobs WHERE id = $1 AND org_id = $2`,
+            `SELECT j.id, j.repo, j.ref, j.status, j.error, j.app_name, j.sbom_id,
+                    j.created_at, j.updated_at,
+                    s.ai_models, s.ai_threats, s.ai_critical, s.least_agency_score
+             FROM scan_jobs j
+             LEFT JOIN sboms s ON s.id = j.sbom_id
+             WHERE j.id = $1 AND j.org_id = $2`,
             [req.params.jobId, req.org.id]
         );
         if (!rows.length) return res.status(404).json({ error: 'Job not found' });
