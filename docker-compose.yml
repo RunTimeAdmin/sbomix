@@ -43,5 +43,21 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  worker:
+    build: .
+    command: ["node", "src/api/workers/scanWorker.js"]
+    environment:
+      DATABASE_URL:     postgres://packrai:${POSTGRES_PASSWORD:-changeme}@db:5432/packrai
+      HMAC_SECRET:      ${HMAC_SECRET:?HMAC_SECRET must be set in .env}
+      RESEND_API_KEY:   ${RESEND_API_KEY:-}
+      RESEND_FROM:      ${RESEND_FROM:-}
+      KATZILLA_API_KEY: ${KATZILLA_API_KEY:-}
+      SCAN_TIMEOUT_MS:     ${SCAN_TIMEOUT_MS:-180000}
+      SCAN_WORKER_POLL_MS: ${SCAN_WORKER_POLL_MS:-2000}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres_data:
