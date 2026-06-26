@@ -3,9 +3,11 @@
 const crypto  = require('crypto');
 const express = require('express');
 const db      = require('../db');
-const { sendEmail }                       = require('../services/emailService');
-const { hashApiKey, generateApiKey }      = require('../middleware/auth');
+const { sendEmail }                         = require('../services/emailService');
+const { hashApiKey, generateApiKey }        = require('../middleware/auth');
 const { registerLimiter, resendKeyLimiter } = require('../middleware/rateLimits');
+const orgsRepo = require('../repositories/orgsRepo');
+const keysRepo = require('../repositories/keysRepo');
 
 const router = express.Router();
 
@@ -27,21 +29,18 @@ router.get('/verify', async (req, res) => {
     }
 
     try {
-        const { rows } = await db.query(
-            `SELECT email, org_name FROM email_verifications WHERE token = $1 AND expires_at > NOW()`,
-            [token]
-        );
-        if (!rows.length) {
+        const verification = await orgsRepo.findEmailVerification(db, token);
+        if (!verification) {
             return res.status(410).send(page('Link expired',
                 '<h1>Link expired</h1><p>This verification link has expired or already been used.</p>' +
                 '<p><a href="/register">Register again →</a></p>'));
         }
 
-        const { email, org_name } = rows[0];
+        const { email, org_name } = verification;
 
-        const existing = await db.query('SELECT id FROM organizations WHERE email = $1', [email]);
-        if (existing.rows.length) {
-            await db.query('DELETE FROM email_verifications WHERE token = $1', [token]);
+        const existing = await orgsRepo.findByEmail(db, email);
+        if (existing) {
+            await orgsRepo.deleteEmailVerification(db, token);
             return res.send(page('Already verified',
                 '<h1>Already verified</h1><p>This email was already verified. Check your inbox for your API key, or ' +
                 '<a href="/recover">request a new key</a>.</p><br><a href="/dashboard" class="btn">Go to dashboard</a>'));
@@ -50,11 +49,8 @@ router.get('/verify', async (req, res) => {
         const apiKey  = generateApiKey();
         const keyHash = hashApiKey(apiKey);
         await db.tx(async (client) => {
-            await client.query(
-                'INSERT INTO organizations (name, email, api_key) VALUES ($1, $2, $3)',
-                [org_name, email, keyHash]
-            );
-            await client.query('DELETE FROM email_verifications WHERE token = $1', [token]);
+            await orgsRepo.createOrg(client, org_name, email, keyHash);
+            await orgsRepo.deleteEmailVerification(client, token);
         });
 
         await sendEmail({
@@ -108,26 +104,14 @@ router.post('/api/v1/register', registerLimiter, async (req, res) => {
     const cleanOrgName = orgName.trim();
 
     try {
-        const existing = await db.query(
-            'SELECT id FROM organizations WHERE email = $1',
-            [cleanEmail]
-        );
-        if (existing.rows.length) {
+        const existing = await orgsRepo.findByEmail(db, cleanEmail);
+        if (existing) {
             return res.json({ message: 'Check your email for a verification link.' });
         }
 
         const token     = crypto.randomBytes(32).toString('hex');
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-        await db.query(
-            `INSERT INTO email_verifications (email, org_name, token, expires_at)
-             VALUES ($1, $2, $3, $4)
-             ON CONFLICT (email) DO UPDATE
-               SET org_name   = EXCLUDED.org_name,
-                   token      = EXCLUDED.token,
-                   expires_at = EXCLUDED.expires_at,
-                   created_at = NOW()`,
-            [cleanEmail, cleanOrgName, token, expiresAt]
-        );
+        await orgsRepo.upsertEmailVerification(db, cleanEmail, cleanOrgName, token, expiresAt);
 
         const verifyUrl = `https://api.packrai.xyz/verify?token=${token}`;
         await sendEmail({
@@ -161,21 +145,12 @@ router.post('/api/v1/resend-key', resendKeyLimiter, async (req, res) => {
     const cleanEmail = email.trim().toLowerCase();
 
     try {
-        const { rows } = await db.query(
-            'SELECT id, name FROM organizations WHERE email = $1',
-            [cleanEmail]
-        );
+        const org = await orgsRepo.findByEmail(db, cleanEmail);
 
-        if (rows.length) {
-            const { id: orgId, name: orgName } = rows[0];
+        if (org) {
             const apiKey  = generateApiKey();
             const keyHash = hashApiKey(apiKey);
-
-            await db.query(
-                `INSERT INTO api_keys (org_id, name, key_hash, scopes)
-                 VALUES ($1, 'recovery', $2, '{org:admin}')`,
-                [orgId, keyHash]
-            );
+            await keysRepo.createKey(db, org.id, 'recovery', keyHash, ['org:admin']);
 
             await sendEmail({
                 to: cleanEmail,
@@ -183,7 +158,7 @@ router.post('/api/v1/resend-key', resendKeyLimiter, async (req, res) => {
                 html: `
 <!DOCTYPE html><html><body style="background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:40px;max-width:560px;margin:0 auto">
 <h1 style="font-size:22px;font-weight:700;margin-bottom:6px"><span style="color:#3fb950">PackrAI</span> — API key recovery</h1>
-<p style="color:#8b949e;margin-bottom:28px">Here is a new API key for <strong style="color:#e6edf3">${orgName}</strong>. This key has <strong>org:admin</strong> access.</p>
+<p style="color:#8b949e;margin-bottom:28px">Here is a new API key for <strong style="color:#e6edf3">${org.name}</strong>. This key has <strong>org:admin</strong> access.</p>
 <p style="margin-bottom:10px;font-weight:600">New API key</p>
 <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px 20px;font-family:monospace;font-size:13px;word-break:break-all;color:#3fb950;margin-bottom:6px">${apiKey}</div>
 <p style="color:#8b949e;font-size:12px;margin-bottom:28px">⚠ Save this key — it won't be shown again.</p>

@@ -6,6 +6,7 @@ const { requireScope }         = require('../middleware/auth');
 const { scanLimiter }          = require('../middleware/rateLimits');
 const { enqueueScanJob, countActiveScansForOrg } = require('../services/scanQueue');
 const { parseGitHubTarget }    = require('../../github');
+const scanJobsRepo             = require('../repositories/scanJobsRepo');
 
 const router = express.Router();
 
@@ -41,12 +42,8 @@ router.post('/api/v1/scan', scanLimiter, requireScope('sbom:ingest'), async (req
 
 router.get('/api/v1/scan', requireScope('sbom:read'), async (req, res) => {
     try {
-        const { rows } = await db.query(
-            `SELECT id, repo, ref, status, error, app_name, created_at, updated_at
-             FROM scan_jobs WHERE org_id = $1 ORDER BY created_at DESC LIMIT 20`,
-            [req.org.id]
-        );
-        res.json({ jobs: rows });
+        const jobs = await scanJobsRepo.listForOrg(db, req.org.id);
+        res.json({ jobs });
     } catch (err) {
         console.error('[scan/list]', err.message);
         res.status(500).json({ error: 'Internal server error' });
@@ -55,17 +52,9 @@ router.get('/api/v1/scan', requireScope('sbom:read'), async (req, res) => {
 
 router.get('/api/v1/scan/:jobId', requireScope('sbom:read'), async (req, res) => {
     try {
-        const { rows } = await db.query(
-            `SELECT j.id, j.repo, j.ref, j.status, j.error, j.app_name, j.sbom_id,
-                    j.created_at, j.updated_at,
-                    s.ai_models, s.ai_threats, s.ai_critical, s.least_agency_score
-             FROM scan_jobs j
-             LEFT JOIN sboms s ON s.id = j.sbom_id
-             WHERE j.id = $1 AND j.org_id = $2`,
-            [req.params.jobId, req.org.id]
-        );
-        if (!rows.length) return res.status(404).json({ error: 'Job not found' });
-        res.json(rows[0]);
+        const job = await scanJobsRepo.findById(db, req.org.id, req.params.jobId);
+        if (!job) return res.status(404).json({ error: 'Job not found' });
+        res.json(job);
     } catch (err) {
         console.error('[scan/get]', err.message);
         res.status(500).json({ error: 'Internal server error' });

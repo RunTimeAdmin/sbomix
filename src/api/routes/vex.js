@@ -1,8 +1,10 @@
 'use strict';
 
 const express = require('express');
-const db      = require('../db');
-const { requireScope } = require('../middleware/auth');
+const { requireScope }   = require('../middleware/auth');
+const componentsRepo     = require('../repositories/componentsRepo');
+const vexRepo            = require('../repositories/vexRepo');
+const db                 = require('../db');
 
 const router = express.Router();
 
@@ -37,28 +39,13 @@ router.post('/api/v1/vex', requireScope('sbom:ingest'), async (req, res) => {
     }
 
     try {
-        const compCheck = await db.query(
-            `SELECT id FROM components WHERE id = $1 AND org_id = $2`,
-            [component_id, req.org.id]
-        );
-        if (!compCheck.rows.length) {
-            return res.status(404).json({ error: 'Component not found' });
-        }
+        const owned = await componentsRepo.verifyOwnership(db, req.org.id, component_id);
+        if (!owned) return res.status(404).json({ error: 'Component not found' });
 
-        const { rows } = await db.query(
-            `INSERT INTO vex_statements
-               (org_id, component_id, osv_id, status, justification, impact_statement, updated_at)
-             VALUES ($1,$2,$3,$4,$5,$6,NOW())
-             ON CONFLICT (org_id, component_id, osv_id) DO UPDATE
-               SET status           = EXCLUDED.status,
-                   justification    = EXCLUDED.justification,
-                   impact_statement = EXCLUDED.impact_statement,
-                   updated_at       = NOW()
-             RETURNING *`,
-            [req.org.id, component_id, osv_id, status,
-             justification || null, impact_statement || null]
+        const statement = await vexRepo.upsertStatement(
+            db, req.org.id, component_id, osv_id, status, justification, impact_statement
         );
-        res.status(201).json(rows[0]);
+        res.status(201).json(statement);
     } catch (err) {
         console.error('[vex:post]', err.message);
         res.status(500).json({ error: 'Internal server error' });
@@ -66,30 +53,12 @@ router.post('/api/v1/vex', requireScope('sbom:ingest'), async (req, res) => {
 });
 
 router.get('/api/v1/vex', requireScope('sbom:read'), async (req, res) => {
-    const { osv_id, component_id } = req.query;
     try {
-        const conditions = ['vx.org_id = $1'];
-        const params     = [req.org.id];
-        if (osv_id) {
-            params.push(osv_id);
-            conditions.push(`vx.osv_id = $${params.length}`);
-        }
-        if (component_id) {
-            params.push(component_id);
-            conditions.push(`vx.component_id = $${params.length}`);
-        }
-
-        const { rows } = await db.query(
-            `SELECT vx.id, vx.component_id, c.purl, c.name AS component_name, c.version,
-                    vx.osv_id, vx.status, vx.justification, vx.impact_statement,
-                    vx.created_at, vx.updated_at
-             FROM vex_statements vx
-             JOIN components c ON c.id = vx.component_id
-             WHERE ${conditions.join(' AND ')}
-             ORDER BY vx.updated_at DESC`,
-            params
-        );
-        res.json({ statements: rows });
+        const statements = await vexRepo.listStatements(db, req.org.id, {
+            osvId:       req.query.osv_id,
+            componentId: req.query.component_id,
+        });
+        res.json({ statements });
     } catch (err) {
         console.error('[vex:get]', err.message);
         res.status(500).json({ error: 'Internal server error' });
@@ -98,11 +67,8 @@ router.get('/api/v1/vex', requireScope('sbom:read'), async (req, res) => {
 
 router.delete('/api/v1/vex/:id', requireScope('sbom:ingest'), async (req, res) => {
     try {
-        const { rowCount } = await db.query(
-            `DELETE FROM vex_statements WHERE id = $1 AND org_id = $2`,
-            [req.params.id, req.org.id]
-        );
-        if (!rowCount) return res.status(404).json({ error: 'VEX statement not found' });
+        const deleted = await vexRepo.deleteStatement(db, req.org.id, req.params.id);
+        if (!deleted) return res.status(404).json({ error: 'VEX statement not found' });
         res.status(204).end();
     } catch (err) {
         console.error('[vex:delete]', err.message);
