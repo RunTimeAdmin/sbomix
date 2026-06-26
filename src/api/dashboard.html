@@ -527,6 +527,16 @@ async function loadDashboard() {
     if (canIngest) loadScanJobs();
   }
 
+  // Show upgrade success banner if redirected from Stripe
+  if (new URLSearchParams(window.location.search).get('upgraded') === '1') {
+    const banner = document.createElement('div');
+    banner.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:9999;background:#1f4722;border:1px solid #3fb950;color:#3fb950;padding:12px 24px;border-radius:8px;font-weight:600;font-size:14px;box-shadow:0 4px 20px rgba(0,0,0,.4)';
+    banner.textContent = '✓ Plan upgraded successfully! Welcome to the next level.';
+    document.body.appendChild(banner);
+    setTimeout(() => banner.remove(), 6000);
+    history.replaceState({}, '', '/dashboard');
+  }
+
   // Summary cards + apps table — delegated to shared helpers (also used by scan poll)
   if (reportRes.status === 'fulfilled') renderSummaryCards(reportRes.value.summary);
   if (appsRes.status === 'fulfilled') {
