@@ -48,13 +48,13 @@ async function markScanDone(jobId, appName, sbomId) {
     );
 }
 
-async function markScanFailed(jobId, error) {
+async function markScanFailed(jobId, error, status = 'failed') {
     await db.query(
         `UPDATE scan_jobs
-         SET status = 'failed', error = $2,
+         SET status = $3, error = $2,
              finished_at = NOW(), updated_at = NOW()
          WHERE id = $1`,
-        [jobId, (error || '').toString().slice(0, 500)]
+        [jobId, (error || '').toString().slice(0, 500), status]
     );
 }
 

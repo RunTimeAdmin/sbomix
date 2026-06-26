@@ -16,11 +16,12 @@
   },
   "type": "commonjs",
   "scripts": {
-    "test": "node --test tests/parsers.test.js",
+    "test": "node --test tests/*.test.js",
     "serve": "node src/api/server.js",
     "e2e": "node scripts/e2e.js",
     "bench": "node scripts/benchmark.js",
-    "lint": "eslint src/ bin/"
+    "lint": "eslint src/ bin/",
+    "test:parsers": "node --test tests/parsers.test.js"
   },
   "dependencies": {
     "commander": "^12.1.0",

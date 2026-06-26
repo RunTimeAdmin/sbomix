@@ -1,5 +1,14 @@
 'use strict';
 
+function esc(s) {
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 const crypto  = require('crypto');
 const express = require('express');
 const db      = require('../db');
@@ -59,21 +68,25 @@ router.get('/verify', async (req, res) => {
             html: `
 <!DOCTYPE html><html><body style="background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:40px;max-width:560px;margin:0 auto">
 <h1 style="font-size:22px;font-weight:700;margin-bottom:6px">Welcome to <span style="color:#3fb950">PackrAI</span></h1>
-<p style="color:#8b949e;margin-bottom:28px">Your org <strong style="color:#e6edf3">${org_name}</strong> is ready.</p>
+<p style="color:#8b949e;margin-bottom:28px">Your org <strong style="color:#e6edf3">${esc(org_name)}</strong> is ready.</p>
 <p style="margin-bottom:10px;font-weight:600">Your API key</p>
 <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px 20px;font-family:monospace;font-size:13px;word-break:break-all;color:#3fb950;margin-bottom:6px">${apiKey}</div>
 <p style="color:#8b949e;font-size:12px;margin-bottom:28px">⚠ Save this key — it won't be shown again.</p>
 <h2 style="font-size:15px;font-weight:600;margin-bottom:12px">Quick start</h2>
 <pre style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;font-size:12px;overflow-x:auto;color:#e6edf3">npm install -g packrai
-packrai owner/repo --push --api-key ${apiKey}
-open https://api.packrai.xyz/dashboard</pre>
+# Scan locally and push to dashboard via GitHub Action
+# See: https://api.packrai.xyz/docs#scan-modes
+
+# Or scan manually:
+npx packrai owner/repo
+# then view results at https://api.packrai.xyz/dashboard</pre>
 <p style="margin-top:28px;color:#8b949e;font-size:13px">Need help? Reply to this email or visit <a href="https://packrai.xyz" style="color:#58a6ff">packrai.xyz</a>.</p>
 </body></html>`,
         });
 
         return res.send(page('Email verified',
             `<h1 style="color:#3fb950">✓ Email verified!</h1>` +
-            `<p>Welcome, <strong style="color:#e6edf3">${org_name}</strong>. Your API key is below and has been emailed to <strong style="color:#e6edf3">${email}</strong>.</p>` +
+            `<p>Welcome, <strong style="color:#e6edf3">${esc(org_name)}</strong>. Your API key is below and has been emailed to <strong style="color:#e6edf3">${esc(email)}</strong>.</p>` +
             `<p style="color:#e6edf3;font-weight:600;margin-bottom:8px">Your API key</p>` +
             `<div class="key" id="key" title="Click to copy">${apiKey}</div>` +
             `<p class="warn" style="margin-bottom:24px">⚠ Save this key — it won't be shown again after you leave this page.</p>` +
@@ -120,7 +133,7 @@ router.post('/api/v1/register', registerLimiter, async (req, res) => {
             html: `
 <!DOCTYPE html><html><body style="background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:40px;max-width:560px;margin:0 auto">
 <h1 style="font-size:22px;font-weight:700;margin-bottom:6px">Verify your <span style="color:#3fb950">PackrAI</span> email</h1>
-<p style="color:#8b949e;margin-bottom:28px">One click to activate <strong style="color:#e6edf3">${cleanOrgName}</strong>. This link expires in 24 hours.</p>
+<p style="color:#8b949e;margin-bottom:28px">One click to activate <strong style="color:#e6edf3">${esc(cleanOrgName)}</strong>. This link expires in 24 hours.</p>
 <a href="${verifyUrl}" style="display:inline-block;background:#238636;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:15px;margin-bottom:28px">Verify email &amp; get API key</a>
 <p style="color:#8b949e;font-size:12px;margin-bottom:4px">Or copy this URL into your browser:</p>
 <div style="background:#161b22;border:1px solid #30363d;border-radius:6px;padding:12px;font-family:monospace;font-size:11px;word-break:break-all;color:#58a6ff">${verifyUrl}</div>
@@ -158,7 +171,7 @@ router.post('/api/v1/resend-key', resendKeyLimiter, async (req, res) => {
                 html: `
 <!DOCTYPE html><html><body style="background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:40px;max-width:560px;margin:0 auto">
 <h1 style="font-size:22px;font-weight:700;margin-bottom:6px"><span style="color:#3fb950">PackrAI</span> — API key recovery</h1>
-<p style="color:#8b949e;margin-bottom:28px">Here is a new API key for <strong style="color:#e6edf3">${org.name}</strong>. This key has <strong>org:admin</strong> access.</p>
+<p style="color:#8b949e;margin-bottom:28px">Here is a new API key for <strong style="color:#e6edf3">${esc(org.name)}</strong>. This key has <strong>org:admin</strong> access.</p>
 <p style="margin-bottom:10px;font-weight:600">New API key</p>
 <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px 20px;font-family:monospace;font-size:13px;word-break:break-all;color:#3fb950;margin-bottom:6px">${apiKey}</div>
 <p style="color:#8b949e;font-size:12px;margin-bottom:28px">⚠ Save this key — it won't be shown again.</p>

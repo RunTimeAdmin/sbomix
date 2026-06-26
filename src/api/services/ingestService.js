@@ -22,7 +22,7 @@ async function executeIngestTx(client, orgId, appName, { version, commit, branch
          RETURNING id`,
         [
             appId, orgId, version, commit, branch,
-            cyclonedx, spdx || null, aibom ? JSON.stringify(aibom) : null,
+            cyclonedx, spdx || null, aibom || null,
             stats?.totalComponents ?? cdxComponents.length,
             stats?.vulnerabilities ?? cdxVulnCount,
             stats?.critical ?? 0,

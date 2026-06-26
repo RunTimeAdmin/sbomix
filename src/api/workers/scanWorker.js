@@ -97,7 +97,7 @@ async function runJob(job) {
         const reason = isTimeout
             ? 'Scan timed out — repository may be too large. Use the CLI for large repos.'
             : err.message;
-        await markScanFailed(jobId, reason);
+        await markScanFailed(jobId, reason, status);
         logJob({ job: jobId, org: orgId, repo, status, elapsed: `${elapsed}ms`, reason: `"${reason.slice(0, 120)}"`, worker: WORKER_ID });
     } finally {
         clearTimeout(timeoutHandle);

@@ -62,6 +62,12 @@ CREATE TABLE sboms (
     quality_score       NUMERIC(5,2),
     ecosystems          TEXT[],
     elapsed_ms          INT,
+    -- AI-BOM fields (populated when AI artifacts are detected during scan)
+    aibom               JSONB,
+    ai_models           INT         NOT NULL DEFAULT 0,
+    ai_threats          INT         NOT NULL DEFAULT 0,
+    ai_critical         INT         NOT NULL DEFAULT 0,
+    least_agency_score  INT,
     generated_at        TIMESTAMPTZ,
     created_at          TIMESTAMPTZ DEFAULT NOW()
 );
@@ -99,6 +105,7 @@ CREATE TABLE vulnerabilities (
     cvss_score      NUMERIC(4,2),
     fixed_version   TEXT,
     title           TEXT,
+    kev             BOOLEAN     NOT NULL DEFAULT FALSE,
     last_checked    TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (component_id, osv_id)
 );
@@ -135,6 +142,7 @@ CREATE INDEX idx_vulns_component      ON vulnerabilities(component_id);
 CREATE INDEX idx_vulns_cve_org        ON vulnerabilities(org_id, cve_id) WHERE cve_id IS NOT NULL;
 CREATE INDEX idx_vulns_osv_org        ON vulnerabilities(org_id, osv_id);
 CREATE INDEX idx_vulns_severity_org   ON vulnerabilities(org_id, severity);
+CREATE INDEX idx_vulns_kev            ON vulnerabilities(org_id) WHERE kev = TRUE;
 CREATE INDEX idx_app_latest_sboms_org ON app_latest_sboms(org_id);
 
 -- ── VEX statements ────────────────────────────────────────────────────────────
@@ -175,31 +183,47 @@ CREATE TABLE kev_catalog (
     refreshed_at   TIMESTAMPTZ DEFAULT NOW()
 );
 
--- kev flag on vulnerabilities — set TRUE when the osv_id/cve_id is in kev_catalog
-ALTER TABLE vulnerabilities ADD COLUMN kev BOOLEAN NOT NULL DEFAULT FALSE;
+-- ── Scan jobs (server-side async repo scans) ──────────────────────────────────
+-- Jobs are claimed by workers using SELECT ... FOR UPDATE SKIP LOCKED.
+-- Worker columns are populated at claim time; finished_at on completion.
+CREATE TABLE scan_jobs (
+    id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id          UUID        NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    repo            TEXT        NOT NULL,
+    ref             TEXT,
+    status          TEXT        NOT NULL DEFAULT 'pending'
+                                CHECK (status IN ('pending','running','done','failed','canceled','timed_out')),
+    error           TEXT,
+    sbom_id         UUID        REFERENCES sboms(id) ON DELETE SET NULL,
+    app_name        TEXT,
+    -- Queue control
+    priority        INT         NOT NULL DEFAULT 100,
+    attempts        INT         NOT NULL DEFAULT 0,
+    max_attempts    INT         NOT NULL DEFAULT 2,
+    -- Worker lease
+    locked_by       TEXT,
+    locked_at       TIMESTAMPTZ,
+    started_at      TIMESTAMPTZ,
+    finished_at     TIMESTAMPTZ,
+    timeout_at      TIMESTAMPTZ,
+    -- Scan metadata
+    scan_mode       TEXT        NOT NULL DEFAULT 'hosted_fast'
+                                CHECK (scan_mode IN ('hosted_fast','hosted_deep','cli')),
+    token_ref       TEXT,
+    repo_size_bytes BIGINT,
+    component_count INT,
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW()
+);
 
-CREATE INDEX idx_vulns_kev ON vulnerabilities(org_id) WHERE kev = TRUE;
+CREATE INDEX idx_scan_jobs_org         ON scan_jobs(org_id, created_at DESC);
+CREATE INDEX idx_scan_jobs_queue       ON scan_jobs(status, priority, created_at) WHERE status = 'pending';
+CREATE INDEX idx_scan_jobs_running_org ON scan_jobs(org_id, status) WHERE status = 'running';
+CREATE INDEX idx_scan_jobs_stale_locks ON scan_jobs(status, locked_at) WHERE status = 'running';
 
 -- ── Email verifications ───────────────────────────────────────────────────────
 -- Holds pending registrations until the user clicks the link.
 -- Unique on email so re-registrations overwrite the stale token.
--- ── Scan jobs (server-side async repo scans) ─────────────────────────────────
-CREATE TABLE scan_jobs (
-    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    org_id     UUID        NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    repo       TEXT        NOT NULL,
-    ref        TEXT,
-    status     TEXT        NOT NULL DEFAULT 'pending'
-                           CHECK (status IN ('pending','running','done','failed')),
-    error      TEXT,
-    sbom_id    UUID        REFERENCES sboms(id) ON DELETE SET NULL,
-    app_name   TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX idx_scan_jobs_org ON scan_jobs(org_id, created_at DESC);
-
--- ── Email verifications ───────────────────────────────────────────────────────
 CREATE TABLE email_verifications (
     id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     email      TEXT        NOT NULL UNIQUE,
