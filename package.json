@@ -1,17 +1,18 @@
 {
-  "name": "packrai",
+  "name": "sbomix",
   "version": "0.3.1",
-  "description": "Fast, accurate SBOM generation from GitHub repos and local lock files",
-  "homepage": "https://packrai.xyz",
+  "description": "Fast, accurate SBOM generation from GitHub repos and local lock files — including AI-BOM",
+  "homepage": "https://sbomix.com",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/RunTimeAdmin/PACKRAI.git"
+    "url": "git+https://github.com/RunTimeAdmin/sbomix.git"
   },
   "bugs": {
-    "url": "https://github.com/RunTimeAdmin/PACKRAI/issues"
+    "url": "https://github.com/RunTimeAdmin/sbomix/issues"
   },
   "main": "src/pipeline.js",
   "bin": {
+    "sbomix": "bin/sbomix.js",
     "packrai": "bin/packrai.js"
   },
   "type": "commonjs",
@@ -41,8 +42,11 @@
     "sbom",
     "cyclonedx",
     "spdx",
+    "aibom",
+    "ai-bom",
     "supply-chain",
-    "security"
+    "security",
+    "sbomix"
   ],
   "license": "MIT"
 }

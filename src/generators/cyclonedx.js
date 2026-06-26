@@ -88,13 +88,13 @@ function buildMetadata(meta, timestamp) {
         tools: {
             components: [{
                 type: 'application',
-                author: 'packrai.xyz',
-                name: 'packrai',
+                author: 'sbomix.com',
+                name: 'sbomix',
                 version: require('../../package.json').version,
-                purl: 'pkg:npm/packrai',
+                purl: 'pkg:npm/sbomix',
                 externalReferences: [{
                     type: 'website',
-                    url: 'https://packrai.xyz',
+                    url: 'https://sbomix.com',
                 }],
             }],
         },
@@ -267,10 +267,10 @@ function buildDatasetData(comp) {
 function buildAIProperties(meta) {
     const p = (name, value) =>
         (value !== null && value !== undefined && value !== '')
-            ? { name: `packrai:ai:${name}`, value: String(value) }
+            ? { name: `sbomix:ai:${name}`, value: String(value) }
             : null;
     const a = meta.authority || {};
-    // Standard-namespace property (no packrai prefix) — matches the agentic /
+    // Standard-namespace property (no sbomix prefix) — matches the agentic /
     // runtime:fencing convention used by the CycloneDX 1.7 ML-BOM ecosystem.
     const std = (name, value) =>
         (value !== null && value !== undefined && value !== '')

@@ -60,13 +60,13 @@ jobs:
 
       - name: Scan fixture directory
         run: |
-          node bin/packrai.js ./tests/fixtures --no-vulns --no-licenses --json --out /tmp/packrai-out
-          test -f /tmp/packrai-out/bom.cyclonedx.json
-          test -f /tmp/packrai-out/bom.spdx.json
+          node bin/sbomix.js ./tests/fixtures --no-vulns --no-licenses --json --out /tmp/sbomix-out
+          test -f /tmp/sbomix-out/bom.cyclonedx.json
+          test -f /tmp/sbomix-out/bom.spdx.json
           echo "CycloneDX and SPDX files generated successfully"
 
       - name: Verify component count
         run: |
-          COUNT=$(node -e "const f=require('/tmp/packrai-out/bom.cyclonedx.json'); console.log(f.components.length)")
+          COUNT=$(node -e "const f=require('/tmp/sbomix-out/bom.cyclonedx.json'); console.log(f.components.length)")
           echo "Component count: $COUNT"
           [ "$COUNT" -gt 10 ] || (echo "Expected >10 components, got $COUNT" && exit 1)

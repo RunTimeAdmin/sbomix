@@ -17,7 +17,7 @@ const { lineageFromComponents, verifyLineage, chainHead } = require('./lineage')
 const { signDocument, verifyDocument, capabilities } = require('./sign');
 const { assessCompliance } = require('./compliance');
 
-const AIBOM_SPEC = 'packrai-aibom/1.0';
+const AIBOM_SPEC = 'sbomix-aibom/1.0';
 
 /**
  * Build a complete AI BOM attestation document.
@@ -55,10 +55,10 @@ function buildAIBomDocument({ aiComponents = [], threats = [], meta = {}, keys =
     const compliance = assessCompliance({ aiComponents, threats, lineage, lineageVerification, signature, agentic });
 
     return {
-        bomFormat:   'PackrAI-AIBOM',
+        bomFormat:   'SBOMix-AIBOM',
         specVersion: AIBOM_SPEC,
         generatedAt: new Date().toISOString(),
-        generator:   { name: 'packrai', cryptoCapabilities: capabilities() },
+        generator:   { name: 'sbomix', cryptoCapabilities: capabilities() },
         subject:     signable.subject,
         components:  aiComponents.map(slimComponent),
         lineage,
@@ -138,16 +138,16 @@ function attachToCycloneDX(cdxBom, aiBom) {
             algorithm: aiBom.signature.algorithm,
             value:     aiBom.signature.value,
             ...(aiBom.signature.publicKey ? { publicKey: aiBom.signature.publicKey } : {}),
-            ...(aiBom.signature.pqc ? { 'packrai:pqc': aiBom.signature.pqc } : {}),
+            ...(aiBom.signature.pqc ? { 'sbomix:pqc': aiBom.signature.pqc } : {}),
         };
     }
 
     cdxBom.properties = [
         ...(cdxBom.properties || []),
-        { name: 'packrai:aibom:lineageHead',     value: aiBom.lineageHead },
-        { name: 'packrai:aibom:lineageIntact',   value: String(aiBom.lineageVerification?.valid ?? false) },
-        { name: 'packrai:aibom:complianceCoverage', value: String(aiBom.compliance?.summary.coveragePct ?? 0) },
-        { name: 'packrai:aibom:spec',            value: aiBom.specVersion },
+        { name: 'sbomix:aibom:lineageHead',     value: aiBom.lineageHead },
+        { name: 'sbomix:aibom:lineageIntact',   value: String(aiBom.lineageVerification?.valid ?? false) },
+        { name: 'sbomix:aibom:complianceCoverage', value: String(aiBom.compliance?.summary.coveragePct ?? 0) },
+        { name: 'sbomix:aibom:spec',            value: aiBom.specVersion },
     ];
 
     return cdxBom;

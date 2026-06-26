@@ -27,7 +27,7 @@ function generateSPDX(components, meta = {}) {
     const deduped = deduplicateComponents(components);
     const now = new Date().toISOString();
     const docName = `${meta.name || 'unknown'}-${meta.version || '0.0.0'}`;
-    const namespace = `https://packrai.xyz/sbom/${docName}-${shortHash()}`;
+    const namespace = `https://sbomix.com/sbom/${docName}-${shortHash()}`;
 
     // Compute SPDX IDs once — reused by packages and relationships
     const spdxIds = new Map(deduped.map((c) => [c.purl, `SPDXRef-${sanitizeSpdxId(c.purl)}`]));
@@ -44,7 +44,7 @@ function generateSPDX(components, meta = {}) {
         creationInfo: {
             created: now,
             creators: [
-                `Tool: packrai-${require('../../package.json').version}`,
+                `Tool: sbomix-${require('../../package.json').version}`,
                 ...(meta.author ? [`Organization: ${meta.author}`] : []),
             ],
             licenseListVersion: '3.22',

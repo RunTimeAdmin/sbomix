@@ -1,6 +1,6 @@
-name: 'PackrAI SBOM Generator'
+name: 'SBOMix SBOM Generator'
 description: 'Generate CycloneDX 1.6 + SPDX 2.3 SBOMs from your project. Fast, accurate, zero-config.'
-author: 'PackrAI'
+author: 'SBOMix'
 
 branding:
   icon: 'shield'
@@ -32,11 +32,11 @@ inputs:
     required: false
     default: 'false'
   api-url:
-    description: 'PackrAI central API endpoint — push SBOMs for org-wide tracking'
+    description: 'SBOMix central API endpoint — push SBOMs for org-wide tracking'
     required: false
     default: ''
   api-key:
-    description: 'PackrAI API key — use secrets.PACKRAI_API_KEY'
+    description: 'SBOMix API key — use secrets.SBOMIX_API_KEY'
     required: false
     default: ''
 
@@ -68,7 +68,7 @@ runs:
       with:
         node-version: '20'
 
-    - name: Install PackrAI dependencies
+    - name: Install SBOMix dependencies
       shell: bash
       run: npm install --prefix "$GITHUB_ACTION_PATH" --omit=dev --no-audit --no-fund
 
@@ -83,29 +83,29 @@ runs:
       run: |
         set -e
 
-        PACKRAI="node $GITHUB_ACTION_PATH/bin/packrai.js"
+        SBOMIX="node $GITHUB_ACTION_PATH/bin/sbomix.js"
         ARGS="$SCAN_DIR --format $SCAN_FORMAT --out $SCAN_OUT"
         [ "$SKIP_VULNS" = "true" ] && ARGS="$ARGS --no-vulns"
 
-        $PACKRAI $ARGS --json > /tmp/packrai-summary.json
+        $SBOMIX $ARGS --json > /tmp/sbomix-summary.json
 
-        echo "component-count=$(jq -r '.totalComponents'    /tmp/packrai-summary.json)" >> "$GITHUB_OUTPUT"
-        echo "vulnerability-count=$(jq -r '.vulnerabilities' /tmp/packrai-summary.json)" >> "$GITHUB_OUTPUT"
-        echo "critical-count=$(jq -r '.critical'            /tmp/packrai-summary.json)" >> "$GITHUB_OUTPUT"
-        echo "quality-score=$(jq -r '.qualityScore // 0'    /tmp/packrai-summary.json)" >> "$GITHUB_OUTPUT"
+        echo "component-count=$(jq -r '.totalComponents'    /tmp/sbomix-summary.json)" >> "$GITHUB_OUTPUT"
+        echo "vulnerability-count=$(jq -r '.vulnerabilities' /tmp/sbomix-summary.json)" >> "$GITHUB_OUTPUT"
+        echo "critical-count=$(jq -r '.critical'            /tmp/sbomix-summary.json)" >> "$GITHUB_OUTPUT"
+        echo "quality-score=$(jq -r '.qualityScore // 0'    /tmp/sbomix-summary.json)" >> "$GITHUB_OUTPUT"
 
         CDX="${{ inputs.output-dir }}/bom.cyclonedx.json"
         SPX="${{ inputs.output-dir }}/bom.spdx.json"
         [ -f "$CDX" ] && echo "cyclonedx-path=$CDX" >> "$GITHUB_OUTPUT"
         [ -f "$SPX" ] && echo "spdx-path=$SPX"      >> "$GITHUB_OUTPUT"
 
-    - name: Push to PackrAI API
+    - name: Push to SBOMix API
       if: inputs.api-url != '' && inputs.api-key != ''
       continue-on-error: true
       shell: bash
       env:
-        PACKRAI_API_URL: ${{ inputs.api-url }}
-        PACKRAI_API_KEY: ${{ inputs.api-key }}
+        SBOMIX_API_URL: ${{ inputs.api-url }}
+        SBOMIX_API_KEY: ${{ inputs.api-key }}
       run: |
         jq -n \
           --arg app    "${{ github.repository }}" \
@@ -114,11 +114,11 @@ runs:
           --arg branch "${{ github.ref_name }}" \
           --slurpfile cdx  "${{ inputs.output-dir }}/bom.cyclonedx.json" \
           --slurpfile spdx "${{ inputs.output-dir }}/bom.spdx.json" \
-          --slurpfile stats /tmp/packrai-summary.json \
+          --slurpfile stats /tmp/sbomix-summary.json \
           '{app:$app, version:$ver, commit:$commit, branch:$branch,
             cyclonedx:$cdx[0], spdx:$spdx[0], stats:$stats[0]}' \
-        | curl -sf -X POST "$PACKRAI_API_URL/api/v1/ingest" \
-            -H "Authorization: Bearer $PACKRAI_API_KEY" \
+        | curl -sf -X POST "$SBOMIX_API_URL/api/v1/ingest" \
+            -H "Authorization: Bearer $SBOMIX_API_KEY" \
             -H "Content-Type: application/json" \
             -d @-
 
@@ -136,10 +136,10 @@ runs:
       with:
         script: |
           const fs = require('fs');
-          const s = JSON.parse(fs.readFileSync('/tmp/packrai-summary.json'));
+          const s = JSON.parse(fs.readFileSync('/tmp/sbomix-summary.json'));
           const badge = s.critical > 0 ? '🔴' : s.vulnerabilities > 0 ? '🟡' : '🟢';
           const body = [
-            `## ${badge} PackrAI SBOM — \`${{ github.sha }}`.slice(0, 7) + '`',
+            `## ${badge} SBOMix SBOM — \`${{ github.sha }}`.slice(0, 7) + '`',
             '',
             '| | |',
             '|---|---|',
@@ -165,8 +165,8 @@ runs:
       if: inputs.fail-on-critical == 'true'
       shell: bash
       run: |
-        CRITICAL=$(jq -r '.critical' /tmp/packrai-summary.json)
+        CRITICAL=$(jq -r '.critical' /tmp/sbomix-summary.json)
         if [ "$CRITICAL" -gt "0" ]; then
-          echo "::error title=PackrAI::$CRITICAL critical vulnerabilities block this merge. Review the SBOM artifact."
+          echo "::error title=SBOMix::$CRITICAL critical vulnerabilities block this merge. Review the SBOM artifact."
           exit 1
         fi

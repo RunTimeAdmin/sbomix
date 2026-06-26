@@ -81,12 +81,12 @@ async function queryBatch(components, timeout) {
         });
         clearTimeout(timer);
     } catch (err) {
-        console.warn(`[packrai] OSV query failed: ${err.message} — continuing without vulnerability data`);
+        console.warn(`[sbomix] OSV query failed: ${err.message} — continuing without vulnerability data`);
         return;
     }
 
     if (!res.ok) {
-        console.warn(`[packrai] OSV API returned ${res.status} — continuing without vulnerability data`);
+        console.warn(`[sbomix] OSV API returned ${res.status} — continuing without vulnerability data`);
         return;
     }
 

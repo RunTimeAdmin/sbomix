@@ -86,7 +86,7 @@ function parsePipfileLock(filePath) {
 // ── requirements.txt (best-effort) ───────────────────────────────────────────
 
 function parseRequirementsTxt(filePath) {
-    console.warn('[packrai] requirements.txt is not a lock file — transitive deps will be missing. '
+    console.warn('[sbomix] requirements.txt is not a lock file — transitive deps will be missing. '
         + 'Use poetry.lock or Pipfile.lock for complete SBOM coverage.');
 
     const raw = fs.readFileSync(filePath, 'utf8');

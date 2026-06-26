@@ -75,8 +75,8 @@ jobs:
           fail-on-critical: true      # set to false to warn without blocking
           upload-artifact: true
           skip-vulns: false           # set to true for offline / faster scans
-          api-url: ${{ vars.PACKRAI_API_URL }}
-          api-key: ${{ secrets.PACKRAI_API_KEY }}
+          api-url: ${{ vars.SBOMIX_API_URL }}
+          api-key: ${{ secrets.SBOMIX_API_KEY }}
 
       # ── 3. Print scan summary (visible in the Actions log) ────────────────
       - name: Print summary

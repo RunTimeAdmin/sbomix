@@ -36,7 +36,7 @@ function parsePomXml(filePath) {
 
     if (directDeps.length > 0) {
         process.stderr.write(
-            `[packrai] maven: mvn not found — returning ${directDeps.length} direct ` +
+            `[sbomix] maven: mvn not found — returning ${directDeps.length} direct ` +
             `deps only. Install Maven for full transitive resolution.\n`
         );
     }

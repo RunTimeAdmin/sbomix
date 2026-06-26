@@ -142,7 +142,7 @@ test('serializeAIBom emits valid JSON and YAML', () => {
     const doc = buildAIBomDocument({ aiComponents, threats, meta: { name: 'app', version: '1.0' } });
     assert.doesNotThrow(() => JSON.parse(serializeAIBom(doc, 'json')));
     const yaml = serializeAIBom(doc, 'yaml');
-    assert.ok(yaml.includes('bomFormat: PackrAI-AIBOM'));
+    assert.ok(yaml.includes('bomFormat: SBOMix-AIBOM'));
 });
 
 test('attachToCycloneDX adds signature and lineage properties', () => {
@@ -154,7 +154,7 @@ test('attachToCycloneDX adds signature and lineage properties', () => {
     const cdx = { bomFormat: 'CycloneDX', components: [] };
     attachToCycloneDX(cdx, doc);
     assert.strictEqual(cdx.signature.algorithm, 'Ed25519');
-    assert.ok(cdx.properties.some(p => p.name === 'packrai:aibom:lineageHead'));
+    assert.ok(cdx.properties.some(p => p.name === 'sbomix:aibom:lineageHead'));
 });
 
 test('all four exporters format without error', () => {

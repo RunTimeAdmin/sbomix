@@ -16,7 +16,7 @@ const { parseModelCardMarkdown, metricsFromModelIndex } = require('../src/parser
 let root;
 
 before(() => {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), 'packrai-aibom-'));
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'sbomix-aibom-'));
     const snap = path.join(root, 'models', 'llama', 'snap');
     fs.mkdirSync(snap, { recursive: true });
     fs.mkdirSync(path.join(root, '.cursor'), { recursive: true });
@@ -141,7 +141,7 @@ test('generator defaults to CycloneDX 1.6, with 1.7 as explicit opt-in', () => {
     assert.strictEqual(def.specVersion, '1.6');                       // safe default
     assert.ok(def['$schema'].includes('bom-1.6.schema.json'));
     assert.strictEqual(def.metadata.component['bom-ref'], 'app-my-agent-app');
-    assert.strictEqual(def.metadata.tools.components[0].author, 'packrai.xyz');
+    assert.strictEqual(def.metadata.tools.components[0].author, 'sbomix.com');
 
     const optIn = generateCycloneDX(res.components, { name: 'app', version: '1.0', specVersion: '1.7' });
     assert.strictEqual(optIn.specVersion, '1.7');
