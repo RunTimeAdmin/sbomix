@@ -98,13 +98,15 @@ router.get('/api/v1/apps/:name/diff', requireScope('sbom:read'), async (req, res
         }
 
         const [fromComps, toComps, fromVulns, toVulns, fromMeta, toMeta] = await Promise.all([
-            sbomsRepo.getComponents(db, fromId),
-            sbomsRepo.getComponents(db, toId),
+            sbomsRepo.getComponents(db, fromId, req.org.id),
+            sbomsRepo.getComponents(db, toId,   req.org.id),
             sbomsRepo.getVulns(db, fromId, req.org.id),
             sbomsRepo.getVulns(db, toId,   req.org.id),
-            sbomsRepo.getMeta(db, fromId),
-            sbomsRepo.getMeta(db, toId),
+            sbomsRepo.getMeta(db, fromId, req.org.id),
+            sbomsRepo.getMeta(db, toId,   req.org.id),
         ]);
+
+        if (!fromMeta || !toMeta) return res.status(404).json({ error: 'SBOM not found' });
 
         const compDiff = diffComponents(fromComps, toComps);
         const vulnDiff = diffVulns(fromVulns, toVulns);

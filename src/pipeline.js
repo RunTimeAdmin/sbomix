@@ -242,14 +242,6 @@ function writeOutputs(result, outDir, opts = {}) {
     };
 }
 
-/**
- * Score 0-100 measuring SBOM completeness against CISA 2025 minimum elements.
- *
- * 25 pts  — all components have a valid purl
- * 25 pts  — all components have at least one hash
- * 25 pts  — all components have a known license (not NOASSERTION)
- * 25 pts  — all lock files are high-fidelity (not requirements.txt fallbacks)
- */
 function countVulns(components) {
     let vulnCount = 0, criticalCount = 0;
     for (const c of components) {
@@ -301,6 +293,14 @@ function makeContainerComponent(img) {
     };
 }
 
+/**
+ * Score 0-100 measuring SBOM completeness against CISA 2025 minimum elements.
+ *
+ * 25 pts  — all components have a valid purl
+ * 25 pts  — all components have at least one hash
+ * 25 pts  — all components have a known license (not NOASSERTION)
+ * 25 pts  — all lock files are high-fidelity (not requirements.txt fallbacks)
+ */
 function computeQualityScore(components, lockFiles) {
     // Only score library components — container and AI components are tracked separately
     const libs = components.filter((c) => c.ecosystem !== 'container' && c.ecosystem !== 'ai');

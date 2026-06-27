@@ -8,21 +8,22 @@ async function getRecentTwo(db, appId) {
     return rows;
 }
 
-async function getMeta(db, sbomId) {
+async function getMeta(db, sbomId, orgId) {
     const { rows } = await db.query(
-        `SELECT id, version, created_at FROM sboms WHERE id = $1`,
-        [sbomId]
+        `SELECT id, version, created_at FROM sboms WHERE id = $1 AND org_id = $2`,
+        [sbomId, orgId]
     );
     return rows[0] || null;
 }
 
-async function getComponents(db, sbomId) {
+async function getComponents(db, sbomId, orgId) {
     const { rows } = await db.query(
         `SELECT c.purl, c.name, c.version, c.ecosystem
          FROM sbom_components sc
          JOIN components c ON c.id = sc.component_id
-         WHERE sc.sbom_id = $1`,
-        [sbomId]
+         JOIN sboms s ON s.id = sc.sbom_id
+         WHERE sc.sbom_id = $1 AND s.org_id = $2`,
+        [sbomId, orgId]
     );
     return rows;
 }

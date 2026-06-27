@@ -130,6 +130,7 @@ router.post('/webhooks/stripe', express.raw({ type: 'application/json' }), async
         }
     } catch (err) {
         console.error('[stripe/webhook] handler error:', err.message);
+        return res.status(500).json({ error: 'Handler error' });
     }
 
     res.json({ received: true });

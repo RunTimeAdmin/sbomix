@@ -3,7 +3,7 @@
 const db              = require('../db');
 const { enrichWithOSV } = require('../../osv');
 
-async function osvEnrichAsync(orgId, cdxComponents, purlToCompId) {
+async function osvEnrichAsync(orgId, cdxComponents, purlToCompId, sbomId) {
     const components = cdxComponents.map(c => ({
         name:      c.name,
         version:   c.version || 'unknown',
@@ -52,6 +52,31 @@ async function osvEnrichAsync(orgId, cdxComponents, purlToCompId) {
              vulnRows.map(r => r.fixedVersion),
              vulnRows.map(r => r.title)]
         );
+
+        if (sbomId) {
+            await db.query(
+                `UPDATE sboms s
+                 SET vulnerability_count = v.total,
+                     critical_count      = v.critical
+                 FROM (
+                     SELECT COUNT(*)                                        AS total,
+                            COUNT(*) FILTER (WHERE v2.severity = 'CRITICAL') AS critical
+                     FROM vulnerabilities v2
+                     JOIN sbom_components sc ON sc.component_id = v2.component_id
+                     WHERE sc.sbom_id = $1 AND v2.org_id = $2
+                 ) v
+                 WHERE s.id = $1`,
+                [sbomId, orgId]
+            );
+            await db.query(
+                `UPDATE app_latest_sboms als
+                 SET vulnerability_count = s.vulnerability_count,
+                     critical_count      = s.critical_count
+                 FROM sboms s
+                 WHERE s.id = $1 AND als.sbom_id = $1`,
+                [sbomId]
+            );
+        }
     }
 }
 

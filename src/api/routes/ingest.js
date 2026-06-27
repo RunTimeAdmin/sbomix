@@ -49,6 +49,7 @@ router.post('/api/v1/ingest', ingestLimiter, requireScope('sbom:ingest'), async 
         }
     } catch (limitErr) {
         console.error('[ingest/plan-check]', limitErr.message);
+        return res.status(500).json({ error: 'Internal server error' });
     }
 
     if (!appName || typeof appName !== 'string') {
@@ -103,7 +104,7 @@ router.post('/api/v1/ingest', ingestLimiter, requireScope('sbom:ingest'), async 
         });
 
         if (!cyclonedx.vulnerabilities?.length && purlToCompId.size > 0) {
-            osvEnrichAsync(req.org.id, cyclonedx.components.filter(c => c.purl), purlToCompId)
+            osvEnrichAsync(req.org.id, cyclonedx.components.filter(c => c.purl), purlToCompId, sbomId)
                 .then(() => {
                     applyKEVAfterIngest(req.org.id);
                     return sendVulnAlertIfNew(req.org.id, appId, appName);

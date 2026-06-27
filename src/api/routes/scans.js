@@ -23,8 +23,8 @@ router.post('/api/v1/scan', scanLimiter, requireScope('sbom:ingest'), async (req
     if (!parseGitHubTarget(cleanRepo)) {
         return res.status(400).json({ error: 'Invalid repo format. Use owner/repo or owner/repo@branch.' });
     }
-    if (token !== undefined && typeof token !== 'string') {
-        return res.status(400).json({ error: 'token must be a string' });
+    if (token !== undefined) {
+        return res.status(501).json({ error: 'Private repository scanning is not supported via the hosted API. Use the sbomix CLI locally instead.' });
     }
 
     try {
