@@ -47,7 +47,7 @@ const spec = {
   info: {
     title: "SBOMix API",
     version: "0.3.0",
-    description: `**SBOMix** is a lockfile-first SBOM and AI-BOM platform supporting 14 package ecosystems. This API lets you ingest SBOMs, query vulnerabilities, search CVE exposure across your org, and manage API keys. AI Bill of Materials data — model weights, datasets, agentic MCP context, and signed lineage — is embedded in the CycloneDX output and returned as a separate `aibom` field on ingest.
+    description: `**SBOMix** is a lockfile-first SBOM and AI-BOM platform supporting 14 package ecosystems. This API lets you ingest SBOMs, query vulnerabilities, search CVE exposure across your org, and manage API keys. AI Bill of Materials data — model weights, datasets, agentic MCP context, and signed lineage — is embedded in the CycloneDX output and returned as a separate \`aibom\` field on ingest.
 
 **Base URL:** \`https://api.sbomix.com\`
 
@@ -70,7 +70,7 @@ Get an API key at [api.sbomix.com/register](https://api.sbomix.com/register).
 ## Scan Modes
 
 ### Hosted Fast Scan (default)
-The default mode when you call `POST /api/v1/scan`.
+The default mode when you call \`POST /api/v1/scan\`.
 
 | Setting | Value |
 |---|---|
@@ -85,9 +85,9 @@ Best for standard app repos and quick dashboard results.
 ### CLI / CI Scan (recommended for large or private repos)
 Run SBOMix where the code already lives:
 
-```bash
+\`\`\`bash
 npx sbomix owner/repo
-```
+\`\`\`
 
 Use this path for:
 - Monorepos or large lockfiles
@@ -95,7 +95,7 @@ Use this path for:
 - Full license and AI enrichment
 - Scans that exceed the 3-minute hosted timeout
 
-Results upload via `POST /api/v1/ingest` — the same endpoint the hosted scanner uses internally.`
+Results upload via \`POST /api/v1/ingest\` — the same endpoint the hosted scanner uses internally.`
   },
   servers: [{ url: "https://api.sbomix.com", description: "Production" }],
   components: {

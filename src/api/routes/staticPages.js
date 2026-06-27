@@ -13,7 +13,7 @@ router.get('/terms',     (_req, res) => res.sendFile(path.join(PAGES, 'terms.htm
 router.get('/privacy',   (_req, res) => res.sendFile(path.join(PAGES, 'privacy.html')));
 router.get('/docs', (_req, res) => {
     res.setHeader('Content-Security-Policy',
-        "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com; connect-src 'self'; img-src 'self' data:; font-src 'self' https://unpkg.com; object-src 'none'; frame-src 'none';"
+        "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com; connect-src 'self' https://unpkg.com; img-src 'self' data:; font-src 'self' https://unpkg.com; object-src 'none'; frame-src 'none';"
     );
     res.sendFile(path.join(PAGES, 'docs.html'));
 });
