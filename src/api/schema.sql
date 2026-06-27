@@ -1,4 +1,4 @@
--- PackrAI Central Repository Schema
+-- SBOMix Central Repository Schema
 -- Postgres 14+  (uses gen_random_uuid(), jsonb, timestamptz)
 
 -- ── Organizations ─────────────────────────────────────────────────────────────

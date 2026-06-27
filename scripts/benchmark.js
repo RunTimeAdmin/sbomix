@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * Benchmark PackrAI against Syft and Trivy.
+ * Benchmark SBOMix against Syft and Trivy.
  *
  * Method: shallow-clone each target repo once, then run all three tools
  * against the same local directory so the comparison is fair (pure scan
@@ -91,7 +91,7 @@ async function main() {
     const hasSyft  = dockerImagePresent('anchore/syft');
     const hasTrivy = dockerImagePresent('aquasec/trivy');
 
-    console.log(`\n  PackrAI Benchmark  —  ${new Date().toISOString().slice(0, 10)}`);
+    console.log(`\n  SBOMix Benchmark  —  ${new Date().toISOString().slice(0, 10)}`);
     console.log(`  node ${process.version}  |  Syft: ${hasSyft ? 'docker ✓' : 'not found'}  |  Trivy: ${hasTrivy ? 'docker ✓' : 'not found'}`);
     if (!hasSyft || !hasTrivy) {
         console.log(`  Missing images: docker pull anchore/syft && docker pull aquasec/trivy`);
@@ -160,7 +160,7 @@ async function main() {
     // Summary
     if (allResults.length > 1) {
         console.log(`\n  ── Summary ${'─'.repeat(47)}`);
-        console.log(`    ${'Target'.padEnd(28)} ${'PackrAI'.padStart(9)} ${'Syft'.padStart(9)} ${'Trivy'.padStart(9)}`);
+        console.log(`    ${'Target'.padEnd(28)} ${'SBOMix'.padStart(9)} ${'Syft'.padStart(9)} ${'Trivy'.padStart(9)}`);
         for (const { target, results } of allResults) {
             const fmt = (r) => !r ? '       —' : r.error ? '   error' : rpad(r.ms + 'ms', 8);
             const [pr, sy, tr] = results;

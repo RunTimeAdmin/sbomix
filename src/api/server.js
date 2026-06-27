@@ -13,6 +13,6 @@ const { startKEVRefresh } = require('../kev');
 
 const PORT = process.env.PORT || 3080;
 app.listen(PORT, () => {
-    process.stdout.write(`PackrAI API listening on :${PORT}\n`);
+    process.stdout.write(`SBOMix API listening on :${PORT}\n`);
     if (process.env.KATZILLA_API_KEY) startKEVRefresh();
 });

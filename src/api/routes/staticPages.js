@@ -16,7 +16,7 @@ router.get('/pricing',   (_req, res) => res.sendFile(path.join(PAGES, 'pricing.h
 router.get('/health',    (_req, res) => res.json({ ok: true }));
 
 router.get('/recover', (_req, res) => {
-    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Recover API Key — PackrAI</title>
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Recover API Key — SBOMix</title>
 <style>*{box-sizing:border-box}body{background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px}
 .card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:40px;max-width:440px;width:100%}
 h1{font-size:22px;margin:0 0 6px}p{color:#8b949e;margin:0 0 20px}

@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * End-to-end integration test for the PackrAI API.
+ * End-to-end integration test for the SBOMix API.
  *
  * Prerequisites:
  *   docker compose up -d   (or npm run serve with DATABASE_URL set)
@@ -12,8 +12,8 @@
  *   node scripts/e2e.js http://localhost:3080
  *
  * Env vars:
- *   PACKRAI_API_URL   - defaults to http://localhost:3080
- *   PACKRAI_ADMIN_KEY - defaults to value in .env or "test-admin-key"
+ *   SBOMIX_API_URL   - defaults to http://localhost:3080
+ *   SBOMIX_ADMIN_KEY - defaults to value in .env or "test-admin-key"
  *
  * Exit 0 = all tests passed  |  Exit 1 = failures
  */
@@ -21,8 +21,8 @@
 const path      = require('path');
 const { generateFromDirectory } = require('../src/pipeline');
 
-const API_URL   = process.argv[2] || process.env.PACKRAI_API_URL || 'http://localhost:3080';
-const ADMIN_KEY = process.env.PACKRAI_ADMIN_KEY || process.env.ADMIN_KEY || 'test-admin-key';
+const API_URL   = process.argv[2] || process.env.SBOMIX_API_URL || 'http://localhost:3080';
+const ADMIN_KEY = process.env.SBOMIX_ADMIN_KEY || process.env.ADMIN_KEY || 'test-admin-key';
 
 let pass = 0;
 let fail = 0;
@@ -44,7 +44,7 @@ async function req(method, path, body, headers = {}) {
 }
 
 async function main() {
-    console.log(`\n  PackrAI E2E Test`);
+    console.log(`\n  SBOMix E2E Test`);
     console.log(`  API: ${API_URL}\n`);
 
     // ── 1. Health check ──────────────────────────────────────────────────────

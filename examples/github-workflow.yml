@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# PackrAI SBOM — full annotated example
+# SBOMix SBOM — full annotated example
 #
 # Copy this file to .github/workflows/sbom.yml in your repository.
 # Minimal version (just SBOM generation + artifact upload):
@@ -9,7 +9,7 @@
 #       runs-on: ubuntu-latest
 #       steps:
 #         - uses: actions/checkout@v4
-#         - uses: RunTimeAdmin/PACKRAI@v1
+#         - uses: RunTimeAdmin/sbomix@v1
 #           with:
 #             format: both
 #             upload-artifact: true
@@ -32,7 +32,7 @@ on:
   # Allow manual re-runs from the Actions tab
   workflow_dispatch:
 
-# Minimum permissions required by PackrAI + PR comment step
+# Minimum permissions required by SBOMix + PR comment step
 permissions:
   contents: read
   pull-requests: write
@@ -47,7 +47,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── 2. Run PackrAI ─────────────────────────────────────────────────────
+      # ── 2. Run SBOMix ─────────────────────────────────────────────────────
       #
       # Inputs:
       #   directory        Directory to scan (default: repo root)
@@ -56,8 +56,8 @@ jobs:
       #   fail-on-critical Block merge if CVSS >= 9.0 vulnerabilities found
       #   upload-artifact  Upload SBOMs as Actions artifacts (90-day retention)
       #   skip-vulns       Set to true to skip OSV enrichment (faster, offline)
-      #   api-url          PackrAI central API endpoint (optional)
-      #   api-key          PackrAI API key — store in repository secrets
+      #   api-url          SBOMix central API endpoint (optional)
+      #   api-key          SBOMix API key — store in repository secrets
       #
       # Outputs (available as ${{ steps.sbom.outputs.* }}):
       #   cyclonedx-path      Path to generated CycloneDX 1.6 JSON
@@ -66,9 +66,9 @@ jobs:
       #   vulnerability-count Known vulnerabilities (via OSV)
       #   critical-count      CVSS >= 9.0 vulnerabilities
       #   quality-score       SBOM completeness score 0-100
-      - name: PackrAI
+      - name: SBOMix
         id: sbom
-        uses: RunTimeAdmin/PACKRAI@v1
+        uses: RunTimeAdmin/sbomix@v1
         with:
           format: both
           output-dir: sbom
@@ -99,7 +99,7 @@ jobs:
   #       project: [services/api, services/worker, frontend]
   #   steps:
   #     - uses: actions/checkout@v4
-  #     - uses: RunTimeAdmin/PACKRAI@v1
+  #     - uses: RunTimeAdmin/sbomix@v1
   #       with:
   #         directory: ${{ matrix.project }}
   #         output-dir: sbom/${{ matrix.project }}

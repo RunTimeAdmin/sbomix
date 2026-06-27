@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>API Reference — PackrAI</title>
+<title>API Reference — SBOMix</title>
 <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
 <style>
   body { margin: 0; background: #0d1117; }
@@ -13,8 +13,8 @@
   .swagger-ui .info p, .swagger-ui .info li, .swagger-ui .info table td, .swagger-ui .info table th { color: #8b949e; }
   .swagger-ui .scheme-container { background: #161b22; border-bottom: 1px solid #30363d; padding: 12px 0; }
 
-  /* PackrAI header strip */
-  #packrai-header {
+  /* SBOMix header strip */
+  #sbomix-header {
     background: #0d1117;
     border-bottom: 1px solid #30363d;
     padding: 14px 24px;
@@ -22,15 +22,15 @@
     align-items: center;
     justify-content: space-between;
   }
-  #packrai-header .logo { font-weight: 700; font-size: 18px; letter-spacing: -0.3px; color: #e6edf3; text-decoration: none; }
-  #packrai-header .logo span { color: #3fb950; }
-  #packrai-header a.nav { color: #8b949e; font-size: 13px; text-decoration: none; margin-left: 20px; }
-  #packrai-header a.nav:hover { color: #e6edf3; }
+  #sbomix-header .logo { font-weight: 700; font-size: 18px; letter-spacing: -0.3px; color: #e6edf3; text-decoration: none; }
+  #sbomix-header .logo span { color: #3fb950; }
+  #sbomix-header a.nav { color: #8b949e; font-size: 13px; text-decoration: none; margin-left: 20px; }
+  #sbomix-header a.nav:hover { color: #e6edf3; }
 </style>
 </head>
 <body>
 
-<div id="packrai-header">
+<div id="sbomix-header">
   <a class="logo" href="/">Packr<span>AI</span></a>
   <div>
     <a class="nav" href="/dashboard">Dashboard</a>
@@ -45,11 +45,11 @@
 const spec = {
   openapi: "3.0.3",
   info: {
-    title: "PackrAI API",
+    title: "SBOMix API",
     version: "0.3.0",
-    description: `**PackrAI** is a lockfile-first SBOM and AI-BOM platform supporting 14 package ecosystems. This API lets you ingest SBOMs, query vulnerabilities, search CVE exposure across your org, and manage API keys. AI Bill of Materials data — model weights, datasets, agentic MCP context, and signed lineage — is embedded in the CycloneDX output and returned as a separate `aibom` field on ingest.
+    description: `**SBOMix** is a lockfile-first SBOM and AI-BOM platform supporting 14 package ecosystems. This API lets you ingest SBOMs, query vulnerabilities, search CVE exposure across your org, and manage API keys. AI Bill of Materials data — model weights, datasets, agentic MCP context, and signed lineage — is embedded in the CycloneDX output and returned as a separate `aibom` field on ingest.
 
-**Base URL:** \`https://api.packrai.xyz\`
+**Base URL:** \`https://api.sbomix.com\`
 
 **Authentication:** All \`/api/v1/*\` endpoints (except \`/api/v1/register\`) require a Bearer token:
 \`\`\`
@@ -63,7 +63,7 @@ Authorization: Bearer <your-api-key>
 | \`sbom:read\` | GET endpoints — apps, search, report, vulns, components, diff |
 | \`org:admin\` | All of the above + key management |
 
-Get an API key at [api.packrai.xyz/register](https://api.packrai.xyz/register).
+Get an API key at [api.sbomix.com/register](https://api.sbomix.com/register).
 
 ---
 
@@ -83,10 +83,10 @@ The default mode when you call `POST /api/v1/scan`.
 Best for standard app repos and quick dashboard results.
 
 ### CLI / CI Scan (recommended for large or private repos)
-Run PackrAI where the code already lives:
+Run SBOMix where the code already lives:
 
 ```bash
-npx packrai owner/repo
+npx sbomix owner/repo
 ```
 
 Use this path for:
@@ -97,7 +97,7 @@ Use this path for:
 
 Results upload via `POST /api/v1/ingest` — the same endpoint the hosted scanner uses internally.`
   },
-  servers: [{ url: "https://api.packrai.xyz", description: "Production" }],
+  servers: [{ url: "https://api.sbomix.com", description: "Production" }],
   components: {
     securitySchemes: {
       bearerAuth: { type: "http", scheme: "bearer", description: "API key from /register or dashboard Keys tab" }
@@ -255,7 +255,7 @@ Results upload via `POST /api/v1/ingest` — the same endpoint the hosted scanne
       post: {
         tags: ["SBOMs"],
         summary: "Ingest a CycloneDX SBOM for an app",
-        description: "Stores the SBOM, normalises components, and triggers OSV vulnerability enrichment. Use the PackrAI CLI or GitHub Action rather than calling this directly.",
+        description: "Stores the SBOM, normalises components, and triggers OSV vulnerability enrichment. Use the SBOMix CLI or GitHub Action rather than calling this directly.",
         requestBody: {
           required: true,
           content: { "application/json": { schema: {
@@ -550,7 +550,7 @@ Results upload via `POST /api/v1/ingest` — the same endpoint the hosted scanne
       post: {
         tags: ["Scan"],
         summary: "Submit an async GitHub repo scan",
-        description: "Clones a GitHub repository and runs the full PackrAI pipeline asynchronously. Poll GET /api/v1/scan/:jobId for status. Results are automatically ingested.",
+        description: "Clones a GitHub repository and runs the full SBOMix pipeline asynchronously. Poll GET /api/v1/scan/:jobId for status. Results are automatically ingested.",
         requestBody: {
           required: true,
           content: { "application/json": { schema: {

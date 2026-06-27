@@ -24,7 +24,7 @@ router.get('/verify', async (req, res) => {
     const { token } = req.query;
 
     const page = (title, body) =>
-        `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title} — PackrAI</title>` +
+        `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title} — SBOMix</title>` +
         `<style>*{box-sizing:border-box}body{background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px}` +
         `.card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:40px;max-width:560px;width:100%}` +
         `h1{font-size:22px;margin:0 0 12px}p{color:#8b949e;margin:0 0 16px}` +
@@ -64,10 +64,10 @@ router.get('/verify', async (req, res) => {
 
         await sendEmail({
             to: email,
-            subject: 'Your PackrAI API Key',
+            subject: 'Your SBOMix API Key',
             html: `
 <!DOCTYPE html><html><body style="background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:40px;max-width:560px;margin:0 auto">
-<h1 style="font-size:22px;font-weight:700;margin-bottom:6px">Welcome to <span style="color:#3fb950">PackrAI</span></h1>
+<h1 style="font-size:22px;font-weight:700;margin-bottom:6px">Welcome to <span style="color:#3fb950">SBOMix</span></h1>
 <p style="color:#8b949e;margin-bottom:28px">Your org <strong style="color:#e6edf3">${esc(org_name)}</strong> is ready.</p>
 <p style="margin-bottom:10px;font-weight:600">Your API key</p>
 <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px 20px;font-family:monospace;font-size:13px;word-break:break-all;color:#3fb950;margin-bottom:6px">${apiKey}</div>
@@ -129,15 +129,15 @@ router.post('/api/v1/register', registerLimiter, async (req, res) => {
         const verifyUrl = `https://api.sbomix.com/verify?token=${token}`;
         await sendEmail({
             to: cleanEmail,
-            subject: 'Verify your PackrAI email',
+            subject: 'Verify your SBOMix email',
             html: `
 <!DOCTYPE html><html><body style="background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:40px;max-width:560px;margin:0 auto">
-<h1 style="font-size:22px;font-weight:700;margin-bottom:6px">Verify your <span style="color:#3fb950">PackrAI</span> email</h1>
+<h1 style="font-size:22px;font-weight:700;margin-bottom:6px">Verify your <span style="color:#3fb950">SBOMix</span> email</h1>
 <p style="color:#8b949e;margin-bottom:28px">One click to activate <strong style="color:#e6edf3">${esc(cleanOrgName)}</strong>. This link expires in 24 hours.</p>
 <a href="${verifyUrl}" style="display:inline-block;background:#238636;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:15px;margin-bottom:28px">Verify email &amp; get API key</a>
 <p style="color:#8b949e;font-size:12px;margin-bottom:4px">Or copy this URL into your browser:</p>
 <div style="background:#161b22;border:1px solid #30363d;border-radius:6px;padding:12px;font-family:monospace;font-size:11px;word-break:break-all;color:#58a6ff">${verifyUrl}</div>
-<p style="margin-top:28px;color:#8b949e;font-size:12px">If you didn't sign up for PackrAI, you can safely ignore this email.</p>
+<p style="margin-top:28px;color:#8b949e;font-size:12px">If you didn't sign up for SBOMix, you can safely ignore this email.</p>
 </body></html>`,
         });
 
@@ -167,10 +167,10 @@ router.post('/api/v1/resend-key', resendKeyLimiter, async (req, res) => {
 
             await sendEmail({
                 to: cleanEmail,
-                subject: 'Your PackrAI API Key (recovery)',
+                subject: 'Your SBOMix API Key (recovery)',
                 html: `
 <!DOCTYPE html><html><body style="background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:40px;max-width:560px;margin:0 auto">
-<h1 style="font-size:22px;font-weight:700;margin-bottom:6px"><span style="color:#3fb950">PackrAI</span> — API key recovery</h1>
+<h1 style="font-size:22px;font-weight:700;margin-bottom:6px"><span style="color:#3fb950">SBOMix</span> — API key recovery</h1>
 <p style="color:#8b949e;margin-bottom:28px">Here is a new API key for <strong style="color:#e6edf3">${esc(org.name)}</strong>. This key has <strong>org:admin</strong> access.</p>
 <p style="margin-bottom:10px;font-weight:600">New API key</p>
 <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px 20px;font-family:monospace;font-size:13px;word-break:break-all;color:#3fb950;margin-bottom:6px">${apiKey}</div>

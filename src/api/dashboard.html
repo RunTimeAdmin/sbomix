@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PackrAI Dashboard</title>
+<title>SBOMix Dashboard</title>
 <style>
   :root {
     --bg:      #0d1117;
@@ -185,7 +185,7 @@
 <div id="auth-screen">
   <div class="auth-card">
     <h2>Sign in to Dashboard</h2>
-    <p>Enter your PackrAI API key to view your org's SBOM inventory and risk posture.</p>
+    <p>Enter your SBOMix API key to view your org's SBOM inventory and risk posture.</p>
     <input class="auth-input" type="password" id="key-input" placeholder="API key" autocomplete="off">
     <button class="auth-submit" id="auth-btn">Continue</button>
     <div class="auth-error" id="auth-error">Invalid API key — check and try again.</div>
@@ -493,7 +493,7 @@ function showList() {
 }
 
 function logout() {
-  localStorage.removeItem('packrai_key');
+  localStorage.removeItem('sbomix_key');
   apiKey = '';
   document.getElementById('logout-btn').style.display = 'none';
   document.getElementById('key-input').value = '';
@@ -1042,7 +1042,7 @@ function buildReport() {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>PackrAI Report — ${esc(app)}</title>
+<title>SBOMix Report — ${esc(app)}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: #0d1117; color: #e6edf3; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; padding: 40px; }
@@ -1074,7 +1074,7 @@ function buildReport() {
   ${meta.commit_sha ? `<span style="font-family:monospace">${esc(meta.commit_sha.slice(0,7))}</span>` : ''}
   ${meta.version && meta.version !== 'unknown' ? `<span>v${esc(meta.version)}</span>` : ''}
   <span>Generated ${now}</span>
-  <span>PackrAI Security Report</span>
+  <span>SBOMix Security Report</span>
 </div>
 
 <div class="stats">
@@ -1096,7 +1096,7 @@ ${comps.length ? `<table>
   <tbody>${compRows}</tbody>
 </table>` : '<p style="color:#8b949e">No components found.</p>'}
 
-<div class="footer">PackrAI · api.packrai.xyz · ${esc(app)} · ${now}</div>
+<div class="footer">SBOMix · api.sbomix.com · ${esc(app)} · ${now}</div>
 </body>
 </html>`;
 }
@@ -1106,7 +1106,7 @@ function downloadHTML() {
   const blob = new Blob([html], { type: 'text/html' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `packrai-${currentApp}-${new Date().toISOString().slice(0,10)}.html`;
+  a.download = `sbomix-${currentApp}-${new Date().toISOString().slice(0,10)}.html`;
   a.click();
   URL.revokeObjectURL(a.href);
 }
@@ -1233,7 +1233,7 @@ function renderAppsList(apps) {
   const appsEl = document.getElementById('apps-wrap');
   if (!apps.length) {
     appsEl.innerHTML = `<div class="empty">No apps ingested yet.<br><br>
-      Run <code style="font-family:monospace;font-size:12px;color:var(--accent)">npx packrai owner/repo</code>
+      Run <code style="font-family:monospace;font-size:12px;color:var(--accent)">npx sbomix owner/repo</code>
       and push your SBOM to see data here.</div>`;
     return;
   }
@@ -1507,7 +1507,7 @@ async function tryAuth(key) {
     });
     if (!r.ok) throw new Error('invalid');
     apiKey = key;
-    localStorage.setItem('packrai_key', key);
+    localStorage.setItem('sbomix_key', key);
     loadDashboard();
   } catch {
     errEl.style.display = 'block';
@@ -1530,7 +1530,7 @@ document.getElementById('logo').addEventListener('click', () => {
 });
 
 // Auto-login from localStorage
-const saved = localStorage.getItem('packrai_key');
+const saved = localStorage.getItem('sbomix_key');
 if (saved) { apiKey = saved; loadDashboard(); }
 </script>
 </body>

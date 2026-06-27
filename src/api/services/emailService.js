@@ -56,7 +56,7 @@ async function sendVulnAlertIfNew(orgId, appId, appName) {
 
         await sendEmail({
             to: email,
-            subject: `[PackrAI] ${newCrits.length} new critical vuln${newCrits.length > 1 ? 's' : ''} in ${appName}`,
+            subject: `[SBOMix] ${newCrits.length} new critical vuln${newCrits.length > 1 ? 's' : ''} in ${appName}`,
             html: `
 <!DOCTYPE html><html><body style="background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:40px;max-width:640px;margin:0 auto">
 <h1 style="font-size:20px;font-weight:700;margin-bottom:4px">New critical vulnerabilities detected</h1>
@@ -108,7 +108,7 @@ async function sendScanCompleteEmail(orgId, appName, stats, commitSha) {
 
         await sendEmail({
             to: email,
-            subject: '[PackrAI] Scan complete — ' + appName + (commit ? ' @' + commit : ''),
+            subject: '[SBOMix] Scan complete — ' + appName + (commit ? ' @' + commit : ''),
             html: '<!DOCTYPE html><html><body style="background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;padding:40px;max-width:600px;margin:0 auto">'
                 + '<p style="color:#3fb950;font-size:12px;font-weight:700;letter-spacing:1px;margin-bottom:8px">SCAN COMPLETE</p>'
                 + '<h1 style="font-size:22px;font-weight:700;margin:0 0 20px">' + appName + '</h1>'

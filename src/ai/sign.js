@@ -13,7 +13,7 @@
  *                   against OpenSSL 3.5+ (or an OQS provider is loaded). Detected
  *                   at startup; absent on OpenSSL 3.0.x.
  *   3. pqc-extern — delegates to an external PQC CLI (e.g. liboqs / oqs-provider)
- *                   configured via PACKRAI_PQC_SIGN_CMD. Lets an OpenSSL-3.0 host
+ *                   configured via SBOMIX_PQC_SIGN_CMD. Lets an OpenSSL-3.0 host
  *                   still produce a real Dilithium/SPHINCS+ signature.
  *
  * Recommended posture is HYBRID (NIST SP 800-208 / BSI migration guidance):
@@ -55,9 +55,9 @@ function capabilities() {
     return {
         classical:   'ed25519',
         nativePQC:   NATIVE_PQC_ALG,                              // string | null
-        externalPQC: !!process.env.PACKRAI_PQC_SIGN_CMD,
+        externalPQC: !!process.env.SBOMIX_PQC_SIGN_CMD,
         opensslVersion: process.versions.openssl,
-        hybridAvailable: !!(NATIVE_PQC_ALG || process.env.PACKRAI_PQC_SIGN_CMD),
+        hybridAvailable: !!(NATIVE_PQC_ALG || process.env.SBOMIX_PQC_SIGN_CMD),
     };
 }
 
@@ -94,13 +94,13 @@ function verifyNativePQC(bytes, sigB64, publicKeyPem) {
 }
 
 /**
- * External PQC signer. PACKRAI_PQC_SIGN_CMD receives the canonical bytes on
+ * External PQC signer. SBOMIX_PQC_SIGN_CMD receives the canonical bytes on
  * stdin and must print a base64 signature on stdout. This is the escape hatch
  * for hosts on OpenSSL 3.0 that have liboqs/oqs-provider available as a CLI.
  */
 function signExternalPQC(bytes) {
-    const cmd = process.env.PACKRAI_PQC_SIGN_CMD;
-    if (!cmd) throw new Error('PACKRAI_PQC_SIGN_CMD not configured');
+    const cmd = process.env.SBOMIX_PQC_SIGN_CMD;
+    if (!cmd) throw new Error('SBOMIX_PQC_SIGN_CMD not configured');
     const [bin, ...args] = cmd.split(' ');
     const out = execFileSync(bin, args, { input: bytes, maxBuffer: 1 << 20 });
     return out.toString('utf8').trim();
@@ -144,9 +144,9 @@ function signDocument(doc, keys, opts = {}) {
                 value:     signNativePQC(bytes, keys.pqcPrivateKey),
                 ...(keys.pqcPublicKey ? { publicKey: keys.pqcPublicKey } : {}),
             };
-        } else if (process.env.PACKRAI_PQC_SIGN_CMD) {
+        } else if (process.env.SBOMIX_PQC_SIGN_CMD) {
             signature.pqc = {
-                algorithm: process.env.PACKRAI_PQC_ALG || 'ML-DSA-65',
+                algorithm: process.env.SBOMIX_PQC_ALG || 'ML-DSA-65',
                 provider:  'external-cli',
                 value:     signExternalPQC(bytes),
             };
@@ -155,7 +155,7 @@ function signDocument(doc, keys, opts = {}) {
             signature.pqc = {
                 status: 'unavailable',
                 reason: `host OpenSSL ${process.versions.openssl} has no ML-DSA/SLH-DSA and ` +
-                        'PACKRAI_PQC_SIGN_CMD is not set — classical signature only',
+                        'SBOMIX_PQC_SIGN_CMD is not set — classical signature only',
             };
         }
     }

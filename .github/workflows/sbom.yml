@@ -17,8 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: PackrAI
-        uses: RunTimeAdmin/PACKRAI@v1
+      - name: SBOMix
+        uses: RunTimeAdmin/sbomix@v1
         with:
           format: both
           output-dir: sbom
