@@ -11,7 +11,12 @@ router.get('/dashboard', (_req, res) => res.sendFile(path.join(PAGES, 'dashboard
 router.get('/register',  (_req, res) => res.sendFile(path.join(PAGES, 'register.html')));
 router.get('/terms',     (_req, res) => res.sendFile(path.join(PAGES, 'terms.html')));
 router.get('/privacy',   (_req, res) => res.sendFile(path.join(PAGES, 'privacy.html')));
-router.get('/docs',      (_req, res) => res.sendFile(path.join(PAGES, 'docs.html')));
+router.get('/docs', (_req, res) => {
+    res.setHeader('Content-Security-Policy',
+        "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com; connect-src 'self'; img-src 'self' data:; font-src 'self' https://unpkg.com; object-src 'none'; frame-src 'none';"
+    );
+    res.sendFile(path.join(PAGES, 'docs.html'));
+});
 router.get('/pricing',   (_req, res) => res.sendFile(path.join(PAGES, 'pricing.html')));
 router.get('/health',    (_req, res) => res.json({ ok: true }));
 
