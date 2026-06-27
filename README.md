@@ -1,25 +1,25 @@
 <div align="center">
-  <img src="assets/packrai-og-banner.jpg" alt="PackrAI — npx packrai" width="800" />
+  <img src="https://sbomix.com/assets/sbomix-og.png" alt="SBOMix" width="800" />
 
-  <h1>PackrAI</h1>
+  <h1>SBOMix</h1>
 
   <p><strong>Generate accurate, compliant SBOMs from any project — in one command.</strong></p>
 
-  [![npm](https://img.shields.io/npm/v/packrai?color=00c851&logo=npm&logoColor=white)](https://www.npmjs.com/package/packrai)
-  [![CI](https://github.com/RunTimeAdmin/PACKRAI/actions/workflows/ci.yml/badge.svg)](https://github.com/RunTimeAdmin/PACKRAI/actions/workflows/ci.yml)
-  [![SBOM](https://github.com/RunTimeAdmin/PACKRAI/actions/workflows/sbom.yml/badge.svg)](https://github.com/RunTimeAdmin/PACKRAI/actions/workflows/sbom.yml)
+  [![npm](https://img.shields.io/npm/v/sbomix?color=00c851&logo=npm&logoColor=white)](https://www.npmjs.com/package/sbomix)
+  [![CI](https://github.com/RunTimeAdmin/sbomix/actions/workflows/ci.yml/badge.svg)](https://github.com/RunTimeAdmin/sbomix/actions/workflows/ci.yml)
+  [![SBOM](https://github.com/RunTimeAdmin/sbomix/actions/workflows/sbom.yml/badge.svg)](https://github.com/RunTimeAdmin/sbomix/actions/workflows/sbom.yml)
   [![License: MIT](https://img.shields.io/badge/license-MIT-00c851)](LICENSE)
   [![CycloneDX 1.6](https://img.shields.io/badge/CycloneDX-1.6-blueviolet)](https://cyclonedx.org)
   [![SPDX 2.3](https://img.shields.io/badge/SPDX-2.3-blue)](https://spdx.dev)
 </div>
 
 ```bash
-npx packrai RunTimeAdmin/myapp@v2.1.0
+npx sbomix RunTimeAdmin/myapp@v2.1.0
 ```
 
 Produces **CycloneDX 1.6** and **SPDX 2.3** in under 500ms. No Docker. No agents. No config files.
 
-> **☁️ Prefer it hosted?** Skip the Postgres setup — [**packrai.xyz**](https://packrai.xyz) is the managed platform: a web dashboard, CVE blast-radius search across every repo, AI-BOM, and SBOM history. Free plan, paid from $19/mo with a 14-day trial. [**Get started free →**](https://api.packrai.xyz/register)
+> **☁️ Prefer it hosted?** Skip the Postgres setup — [**sbomix.com**](https://sbomix.com) is the managed platform: a web dashboard, CVE blast-radius search across every repo, AI-BOM, and SBOM history. Free plan, paid from $19/mo with a 14-day trial. [**Get started free →**](https://api.sbomix.com/register)
 
 ---
 
@@ -27,31 +27,31 @@ Produces **CycloneDX 1.6** and **SPDX 2.3** in under 500ms. No Docker. No agents
 
 ```bash
 # Scan a GitHub repo at a specific tag
-npx packrai owner/repo@v1.2.0
+npx sbomix owner/repo@v1.2.0
 
 # Scan the current directory
-npx packrai .
+npx sbomix .
 
 # Scan a local directory
-npx packrai ./my-project
+npx sbomix ./my-project
 
 # Private repo (uses $GITHUB_TOKEN automatically)
-npx packrai owner/private-repo
+npx sbomix owner/private-repo
 
 # Diff two SBOMs — see what changed between releases
-npx packrai diff old.cyclonedx.json new.cyclonedx.json
+npx sbomix diff old.cyclonedx.json new.cyclonedx.json
 
 # Check for forbidden/restricted licenses
-npx packrai . --license-check
+npx sbomix . --license-check
 
 # Skip vulnerability lookup (faster, offline-safe)
-npx packrai owner/repo --no-vulns
+npx sbomix owner/repo --no-vulns
 
 # AI remediation advice — explains vulns and produces a prioritised fix plan
-DEEPSEEK_API_KEY=sk-... npx packrai . --explain
+DEEPSEEK_API_KEY=sk-... npx sbomix . --explain
 
 # AI explain with CISA KEV context — flags actively-exploited vulns
-DEEPSEEK_API_KEY=sk-... KATZILLA_API_KEY=kz_... npx packrai . --explain
+DEEPSEEK_API_KEY=sk-... KATZILLA_API_KEY=kz_... npx sbomix . --explain
 ```
 
 Output files written to the current directory:
@@ -73,7 +73,7 @@ flowchart LR
         C["pom.xml · Gemfile.lock\ncomposer.lock · packages.lock.json"]
     end
 
-    subgraph engine["PackrAI Engine"]
+    subgraph engine["SBOMix Engine"]
         direction TB
         D[Detect] --> E[Parse dep graph]
         D --> DF[Dockerfile audit\nsecurity findings]
@@ -92,7 +92,7 @@ flowchart LR
     end
 
     subgraph platform["Central Platform (optional)"]
-        K[PackrAI API]
+        K[SBOMix API]
         L[(PostgreSQL)]
         M[Dashboard]
         K --> L --> M
@@ -104,13 +104,13 @@ flowchart LR
     output -->|ingest| platform
 ```
 
-Lock files are the resolved dependency graph — authoritative, deterministic, and exact. PackrAI reads them directly instead of walking the filesystem, which is why it's 60–187× faster than Syft and Trivy on equivalent repos.
+Lock files are the resolved dependency graph — authoritative, deterministic, and exact. SBOMix reads them directly instead of walking the filesystem, which is why it's 60–187× faster than Syft and Trivy on equivalent repos.
 
 ---
 
-## Why PackrAI
+## Why SBOMix
 
-| | PackrAI | Syft | Trivy |
+| | SBOMix | Syft | Trivy |
 |---|---|---|---|
 | **Speed** | **250–465ms** | 9–28s | 10–87s |
 | **Approach** | Lock-file parsing | Filesystem scan | Filesystem + image scan |
@@ -129,8 +129,8 @@ Lock files are the resolved dependency graph — authoritative, deterministic, a
 
 ### Benchmark Results
 
-| Repo | Ecosystem | PackrAI | Syft | Trivy |
-|------|-----------|---------|------|-------|
+| Repo | Ecosystem | SBOMix | Syft | Trivy |
+|------|-----------|--------|------|-------|
 | `nestjs/nest` | npm | **463ms** | 27 731ms | 86 550ms |
 | `psf/requests` | Python | **251ms** | 9 330ms | 10 502ms |
 | `BurntSushi/ripgrep` | Rust | **268ms** | 11 823ms | 15 425ms |
@@ -149,13 +149,13 @@ Every component is checked against the [OSV database](https://osv.dev) in a sing
 
 ### License Compliance
 ```bash
-npx packrai . --license-check
+npx sbomix . --license-check
 ```
 Categorises each component's license as **permissive**, **notice**, **restricted** (weak copyleft — review required), or **forbidden** (strong copyleft). Exits `1` if any forbidden license is found. Produces a license compliance score 0–100.
 
 ### SBOM Diffing
 ```bash
-npx packrai diff v1.0.0.cyclonedx.json v1.1.0.cyclonedx.json
+npx sbomix diff v1.0.0.cyclonedx.json v1.1.0.cyclonedx.json
 ```
 Shows exactly what changed between two releases: components added/removed/updated, and new or resolved vulnerabilities. Exits `1` if new vulnerabilities were introduced. Available both as a CLI command and via the API (`GET /api/v1/apps/:name/diff`).
 
@@ -169,7 +169,7 @@ Requires `KATZILLA_API_KEY` ([katzilla.dev](https://katzilla.dev)). The catalog 
 
 ### AI Remediation Advice
 ```bash
-DEEPSEEK_API_KEY=sk-... npx packrai . --explain
+DEEPSEEK_API_KEY=sk-... npx sbomix . --explain
 ```
 After scanning, sends your vulnerability list to [DeepSeek-V3](https://platform.deepseek.com) and returns:
 - 2–3 sentence plain-English risk summary
@@ -181,7 +181,7 @@ Available both as a CLI flag (`--explain`) and as a REST endpoint (`POST /api/v1
 
 ### Dockerfile Security Audit
 
-PackrAI automatically detects and audits every `Dockerfile` in your project tree (including `Dockerfile.prod`, `Dockerfile.dev`, etc.) and reports security findings alongside the SBOM:
+SBOMix automatically detects and audits every `Dockerfile` in your project tree (including `Dockerfile.prod`, `Dockerfile.dev`, etc.) and reports security findings alongside the SBOM:
 
 | Rule | Severity | What it catches |
 |------|----------|-----------------|
@@ -197,7 +197,7 @@ Multi-stage builds are detected. Use `--no-docker` to skip Dockerfile scanning e
 
 ### Base Image CVE Lookup
 
-For Docker Official Images (`node`, `nginx`, `python`, `ubuntu`, etc.), PackrAI pulls the SBOM attestation directly from the Docker Hub OCI registry and queries OSV for known CVEs — with no Docker installation required.
+For Docker Official Images (`node`, `nginx`, `python`, `ubuntu`, etc.), SBOMix pulls the SBOM attestation directly from the Docker Hub OCI registry and queries OSV for known CVEs — with no Docker installation required.
 
 ```
 Dockerfile  ·  2 MEDIUM  1 LOW  · multi-stage
@@ -240,15 +240,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: PackrAI
-        uses: RunTimeAdmin/PACKRAI@v1
+      - name: SBOMix
+        uses: RunTimeAdmin/sbomix@v1
         with:
           format: both
           fail-on-critical: true
           upload-artifact: true
 ```
 
-On every pull request, PackrAI will:
+On every pull request, SBOMix will:
 - Generate CycloneDX 1.6 + SPDX 2.3 SBOMs
 - Post a summary comment to the PR with vulnerability count and quality score
 - Upload SBOMs as artifacts with 90-day retention
@@ -263,8 +263,8 @@ On every pull request, PackrAI will:
 | `fail-on-critical` | `true` | Exit 1 if critical vulnerabilities found |
 | `upload-artifact` | `true` | Upload SBOMs as GitHub Actions artifacts |
 | `skip-vulns` | `false` | Skip OSV enrichment (faster, offline-safe) |
-| `api-url` | `""` | PackrAI central API endpoint |
-| `api-key` | `""` | PackrAI API key (`secrets.PACKRAI_API_KEY`) |
+| `api-url` | `""` | SBOMix central API endpoint |
+| `api-key` | `""` | SBOMix API key (`secrets.SBOMIX_API_KEY`) |
 | `directory` | `.` | Directory to scan |
 
 ### Action Outputs
@@ -281,17 +281,17 @@ On every pull request, PackrAI will:
 ### With Central Tracking
 
 ```yaml
-      - name: PackrAI
-        uses: RunTimeAdmin/PACKRAI@v1
+      - name: SBOMix
+        uses: RunTimeAdmin/sbomix@v1
         with:
           format: both
           fail-on-critical: true
           upload-artifact: true
-          api-url: ${{ vars.PACKRAI_API_URL }}
-          api-key: ${{ secrets.PACKRAI_API_KEY }}
+          api-url: ${{ vars.SBOMIX_API_URL }}
+          api-key: ${{ secrets.SBOMIX_API_KEY }}
 ```
 
-When `api-url` and `api-key` are set, SBOMs are automatically pushed to your PackrAI central instance for org-wide tracking. Upload failures do not fail the build.
+When `api-url` and `api-key` are set, SBOMs are automatically pushed to your SBOMix central instance for org-wide tracking. Upload failures do not fail the build.
 
 ---
 
@@ -315,15 +315,15 @@ When `api-url` and `api-key` are set, SBOMs are automatically pushed to your Pac
 | **Swift** | `Package.resolved` | ⚠️ Direct only | Git SHA hashes |
 | **Dart/Flutter** | `pubspec.lock` | ⚠️ Direct only | SHA-256 hashes |
 
-Monorepos are supported — PackrAI recurses up to 4 directories deep and deduplicates lock files per directory.
+Monorepos are supported — SBOMix recurses up to 4 directories deep and deduplicates lock files per directory.
 
 ---
 
 ## CLI Reference
 
 ```
-packrai <source> [options]
-packrai diff <from> <to> [options]
+sbomix <source> [options]
+sbomix diff <from> <to> [options]
 
 Arguments:
   source                Local path, owner/repo[@ref], or https://github.com/... URL
@@ -409,19 +409,19 @@ Both formats include all CISA 2025 minimum elements, full transitive dependency 
 
 ## Central Platform (Self-Hosted)
 
-> Don't want to run this yourself? The same platform is available fully managed at [packrai.xyz](https://packrai.xyz) — no Postgres, no server, free to start.
+> Don't want to run this yourself? The same platform is available fully managed at [sbomix.com](https://sbomix.com) — no Postgres, no server, free to start.
 
-The PackrAI API server answers org-wide questions like:
+The SBOMix API server answers org-wide questions like:
 
 > "Which of our apps are exposed to CVE-2021-44228, and do any of them have a fix available?"
 
 ```mermaid
 flowchart TD
     subgraph ci["CI/CD (GitHub Actions)"]
-        A[PackrAI Action] -->|POST /ingest| B
+        A[SBOMix Action] -->|POST /ingest| B
     end
 
-    subgraph api["PackrAI API"]
+    subgraph api["SBOMix API"]
         B[Ingest endpoint]
         C[Search endpoint]
         D[Report endpoint]
@@ -479,21 +479,21 @@ See [`src/api/schema.sql`](src/api/schema.sql) for the full database schema.
 ## Development
 
 ```bash
-git clone https://github.com/RunTimeAdmin/PACKRAI
-cd PACKRAI
+git clone https://github.com/RunTimeAdmin/sbomix
+cd sbomix
 npm install
 
-npm test          # unit tests (66 tests, no external deps)
+npm test          # unit tests (no external deps)
 npm run e2e       # integration tests (requires docker compose up -d)
 npm run bench     # benchmark vs Syft and Trivy
-node bin/packrai.js . --no-vulns   # run the CLI locally
+node bin/sbomix.js . --no-vulns   # run the CLI locally
 ```
 
 ### Project Structure
 
 ```
-packrai/
-├── bin/packrai.js          CLI entry point (scan + diff subcommands)
+sbomix/
+├── bin/sbomix.js           CLI entry point (scan + diff subcommands)
 ├── src/
 │   ├── pipeline.js         Orchestration: detect → parse → enrich → generate
 │   ├── diff.js             SBOM diffing: components and vulnerabilities
@@ -529,9 +529,9 @@ packrai/
 │       ├── db.js           PostgreSQL connection pool + transaction helper
 │       └── schema.sql      Database schema
 ├── deploy/
-│   ├── migrate_001_app_latest_sboms.sql
-│   ├── migrate_002_vex.sql
-│   └── docker-compose.yml  API + Postgres production stack
+│   ├── sbomix-nginx.conf   nginx vhost (HTTP → HTTPS proxy)
+│   ├── push-and-run.sh     Deploy helper script
+│   └── vps-setup.sh        VPS bootstrap script
 ├── tests/
 │   ├── parsers.test.js     Parser unit tests
 │   └── fixtures/           Sample lock files (all 14 ecosystems)
@@ -565,7 +565,7 @@ packrai/
 
 ## Known Limitations
 
-PackrAI is a **lock-file-first** SBOM generator. This makes it fast and deterministic, but it does not replace container or filesystem scanners for all use cases.
+SBOMix is a **lock-file-first** SBOM generator. This makes it fast and deterministic, but it does not replace container or filesystem scanners for all use cases.
 
 | Area | Detail |
 |------|--------|
