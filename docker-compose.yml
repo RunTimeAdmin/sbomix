@@ -23,7 +23,9 @@ services:
       ADMIN_KEY:         ${ADMIN_KEY:?ADMIN_KEY must be set in .env}
       HMAC_SECRET:       ${HMAC_SECRET:?HMAC_SECRET must be set in .env}
       PORT:              3080
-      DEEPSEEK_API_KEY:  ${DEEPSEEK_API_KEY:-}
+      EXPLAIN_API_KEY:   ${EXPLAIN_API_KEY:-}
+      EXPLAIN_BASE_URL:  ${EXPLAIN_BASE_URL:-}
+      EXPLAIN_MODEL:     ${EXPLAIN_MODEL:-}
       KATZILLA_API_KEY:  ${KATZILLA_API_KEY:-}
       CORS_ORIGIN:       ${CORS_ORIGIN:-}
       ENABLE_ADMIN_API:  ${ENABLE_ADMIN_API:-}

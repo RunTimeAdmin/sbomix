@@ -421,7 +421,7 @@ Results upload via \`POST /api/v1/ingest\` — the same endpoint the hosted scan
       post: {
         tags: ["Vulns"],
         summary: "AI-generated remediation advice for an app's vulnerabilities",
-        description: "Sends the app's active vulnerabilities to DeepSeek-V3 and returns a prioritised remediation plan. Requires `DEEPSEEK_API_KEY` on the server.",
+        description: "Sends the app's active vulnerabilities to the configured AI provider (default: Claude Haiku) and returns a prioritised remediation plan. Requires `EXPLAIN_API_KEY` on the server.",
         parameters: [{ name: "name", in: "path", required: true, schema: { type: "string" } }],
         responses: {
           "200": { description: "AI explanation",
@@ -431,7 +431,7 @@ Results upload via \`POST /api/v1/ingest\` — the same endpoint the hosted scan
             }}}}
           },
           "404": { description: "App not found" },
-          "501": { description: "DEEPSEEK_API_KEY not configured on server" }
+          "501": { description: "EXPLAIN_API_KEY not configured on server" }
         }
       }
     },

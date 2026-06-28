@@ -11,8 +11,6 @@ docker-compose.yml
 Dockerfile
 scripts/
 tests/
-PACKRAI_review.md
-
 # Server-side files (not part of the CLI package)
 src/api/
 
@@ -20,10 +18,8 @@ src/api/
 assets/
 
 # Stray analysis/review docs
-PACKRAI_performance_review.md
-PACKRAI_updated_full_review.md
-packrai_perf_check.js
-packrai_perf_check.json
+perf_check.js
+perf_check.json
 
 # Deployment scripts
 deploy/

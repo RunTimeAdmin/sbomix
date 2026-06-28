@@ -20,19 +20,25 @@
  *   --no-vulns              skip OSV vulnerability lookup
  *   --no-recursive          do not recurse into subdirectories
  *   --format <fmt>          both | cyclonedx | spdx  (default: both)
+ *   --aibom-format <fmt>    json | yaml  (default: json)
  *   --license-check         flag forbidden/restricted licenses; exit 1 if any found
  *   --json                  machine-readable JSON summary to stdout
+ *   --push                  push SBOM to SBOMix API (requires --api-key or $SBOMIX_API_KEY)
+ *   --api-key <key>         SBOMix API key (or set $SBOMIX_API_KEY)
+ *   --api-url <url>         SBOMix API base URL (or set $SBOMIX_API_URL)
  */
 
 const { Command, program } = require('commander');
 const path  = require('path');
 const fs    = require('fs');
-const { generateFromDirectory } = require('../src/pipeline');
+const { generateFromDirectory, writeOutputs } = require('../src/pipeline');
 const { diffCycloneDX } = require('../src/diff');
 const { explainVulnerabilities } = require('../src/explain');
 const { fetchKEVSet }            = require('../src/kev');
 const { isGitHubTarget, parseGitHubTarget, cloneRepo } = require('../src/github');
 const pkg = require('../package.json');
+
+const DEFAULT_API_URL = 'https://api.sbomix.com';
 
 // ── diff subcommand ───────────────────────────────────────────────────────────
 program.addCommand(
@@ -97,31 +103,83 @@ program.addCommand(
         })
 );
 
+// ── push helper ───────────────────────────────────────────────────────────────
+async function pushSbom(result, { apiUrl, apiKey, appName, version, commit, branch }) {
+    const targetUrl = new URL('/api/v1/ingest', apiUrl);
+    const protocol  = require(targetUrl.protocol === 'https:' ? 'https' : 'http');
+    const payload   = JSON.stringify({
+        app:       appName,
+        version,
+        commit:    commit || undefined,
+        branch:    branch || undefined,
+        cyclonedx: result.cyclonedx,
+        spdx:      result.spdx,
+        aibom:     result.aiBom,
+        stats:     result.stats,
+    });
+
+    return new Promise((resolve, reject) => {
+        const req = protocol.request({
+            hostname: targetUrl.hostname,
+            port:     targetUrl.port || undefined,
+            path:     targetUrl.pathname,
+            method:   'POST',
+            headers:  {
+                'Content-Type':   'application/json',
+                'Authorization':  `Bearer ${apiKey}`,
+                'Content-Length': Buffer.byteLength(payload),
+            },
+        }, (res) => {
+            let body = '';
+            res.on('data', (d) => body += d);
+            res.on('end', () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                    try { resolve(JSON.parse(body)); } catch { resolve({}); }
+                } else {
+                    reject(new Error(`${res.statusCode}: ${body.slice(0, 200)}`));
+                }
+            });
+        });
+        req.on('error', reject);
+        req.write(payload);
+        req.end();
+    });
+}
+
 // ── scan (default) command ────────────────────────────────────────────────────
 program
     .name('sbomix')
     .description('Generate accurate SBOMs from any GitHub repo or local directory')
     .version(pkg.version)
     .argument('<source>', 'Local path  OR  owner/repo[@ref]  OR  GitHub URL')
-    .option('-o, --out <dir>',      'Output directory',                        '.')
-    .option('-n, --name <name>',    'Project name (default: repo / dir name)')
-    .option('-v, --ver <version>',  'Project version (default: tag or unknown)')
-    .option('-a, --author <org>',   'Author or organisation name')
-    .option('--token <token>',      'GitHub token for private repos (or set $GITHUB_TOKEN)')
-    .option('--no-vulns',           'Skip OSV vulnerability enrichment')
-    .option('--no-licenses',        'Skip deps.dev license enrichment')
-    .option('--no-recursive',       'Do not recurse into subdirectories')
-    .option('--no-docker',          'Skip Dockerfile audit')
-    .option('--format <fmt>',       'Output format: both|cyclonedx|spdx',      'both')
-    .option('--license-check',      'Flag forbidden/restricted licenses; exit 1 if any found')
-    .option('--explain',            'Use AI to explain vulnerabilities and suggest a remediation plan (requires DEEPSEEK_API_KEY)')
-    .option('--json',               'Print summary as JSON (machine-readable)')
+    .option('-o, --out <dir>',          'Output directory',                        '.')
+    .option('-n, --name <name>',        'Project name (default: repo / dir name)')
+    .option('-v, --ver <version>',      'Project version (default: tag or unknown)')
+    .option('-a, --author <org>',       'Author or organisation name')
+    .option('--token <token>',          'GitHub token for private repos (or set $GITHUB_TOKEN)')
+    .option('--no-vulns',               'Skip OSV vulnerability enrichment')
+    .option('--no-licenses',            'Skip deps.dev license enrichment')
+    .option('--no-recursive',           'Do not recurse into subdirectories')
+    .option('--no-docker',              'Skip Dockerfile audit')
+    .option('--format <fmt>',           'Output format: both|cyclonedx|spdx',      'both')
+    .option('--aibom-format <fmt>',     'AI-BOM format: json|yaml',                'json')
+    .option('--license-check',          'Flag forbidden/restricted licenses; exit 1 if any found')
+    .option('--explain',                'AI remediation advice (requires EXPLAIN_API_KEY; defaults to Claude Haiku)')
+    .option('--json',                   'Print summary as JSON (machine-readable)')
+    .option('--push',                   'Push SBOM to SBOMix API (requires --api-key or $SBOMIX_API_KEY)')
+    .option('--api-key <key>',          'SBOMix API key (or set $SBOMIX_API_KEY)')
+    .option('--api-url <url>',          'SBOMix API base URL',                    DEFAULT_API_URL)
     .action(async (source, opts) => {
         let scanDir   = null;
         let cleanup   = null;
         let repoName  = opts.name  || null;
         let repoVer   = opts.ver   || null;
         let commitSha = null;
+
+        const ok   = (s) => `\x1b[32m✓\x1b[0m ${s}`;
+        const warn = (s) => `\x1b[33m⚠\x1b[0m ${s}`;
+        const err  = (s) => `\x1b[31m✖\x1b[0m ${s}`;
+        const dim  = (s) => `  \x1b[2m${s}\x1b[0m`;
 
         try {
             // Local check comes FIRST — "tests/fixtures" must not be mistaken for owner/repo.
@@ -170,29 +228,23 @@ program
 
             const { stats } = result;
             const outDir = path.resolve(opts.out);
-            fs.mkdirSync(outDir, { recursive: true });
-
-            const written = {};
-            if (opts.format !== 'spdx') {
-                written.cyclonedx = path.join(outDir, 'bom.cyclonedx.json');
-                fs.writeFileSync(written.cyclonedx, JSON.stringify(result.cyclonedx, null, 2));
-            }
-            if (opts.format !== 'cyclonedx') {
-                written.spdx = path.join(outDir, 'bom.spdx.json');
-                fs.writeFileSync(written.spdx, JSON.stringify(result.spdx, null, 2));
-            }
+            const written = writeOutputs(result, outDir, { aibomFormat: opts.aibomFormat });
 
             if (opts.json) {
-                console.log(JSON.stringify({ ...stats, commitSha, outputs: written }, null, 2));
+                console.log(JSON.stringify({
+                    ...stats,
+                    commitSha,
+                    outputs: {
+                        cyclonedx: written.cyclonedxPath,
+                        spdx:      written.spdxPath,
+                        aibom:     written.aibomPath,
+                    },
+                }, null, 2));
             } else {
-                const ok   = (s) => `\x1b[32m✓\x1b[0m ${s}`;
-                const warn = (s) => `\x1b[33m⚠\x1b[0m ${s}`;
-                const err  = (s) => `\x1b[31m✖\x1b[0m ${s}`;
-                const dim  = (s) => `  \x1b[2m${s}\x1b[0m`;
-
                 console.log(ok(`${stats.totalComponents} components  ·  ${stats.ecosystems.join(', ')}`));
-                if (written.cyclonedx) console.log(ok(`CycloneDX 1.6  →  ${written.cyclonedx}`));
-                if (written.spdx)      console.log(ok(`SPDX 2.3       →  ${written.spdx}`));
+                if (written.cyclonedxPath) console.log(ok(`CycloneDX 1.6  →  ${written.cyclonedxPath}`));
+                if (written.spdxPath)      console.log(ok(`SPDX 2.3       →  ${written.spdxPath}`));
+                if (written.aibomPath)     console.log(ok(`AI-BOM         →  ${written.aibomPath}`));
 
                 if (stats.vulnerabilities === 0) {
                     console.log(ok('0 known vulnerabilities'));
@@ -200,6 +252,16 @@ program
                     console.log(warn(`${stats.vulnerabilities} vulnerabilities  (${stats.critical} CRITICAL)`));
                 } else {
                     console.log(warn(`${stats.vulnerabilities} vulnerabilities`));
+                }
+
+                if (stats.aiModels > 0) {
+                    if (stats.aiCritical > 0) {
+                        console.log(err(`${stats.aiModels} AI model(s)  ·  ${stats.aiCritical} critical threat(s)`));
+                    } else if (stats.aiThreats > 0) {
+                        console.log(warn(`${stats.aiModels} AI model(s)  ·  ${stats.aiThreats} threat(s)`));
+                    } else {
+                        console.log(ok(`${stats.aiModels} AI model(s) detected`));
+                    }
                 }
 
                 console.log(ok(`Quality score  ${stats.qualityScore}/100`));
@@ -224,8 +286,6 @@ program
                                 console.log(dim(`  [${f.severity}] ${f.rule}${loc}  ${f.message}`));
                             }
                         }
-                        // Base image CVEs (from SBOM attestation lookup)
-                        // Deduplicate — multi-stage builds often reuse the same base image
                         const shownBase = new Set();
                         for (const img of audit.baseImages) {
                             if (shownBase.has(img.raw)) continue;
@@ -245,7 +305,6 @@ program
                                 if (high) parts.push(`${high} HIGH`);
                                 const vulnStr = crit > 0 ? err(parts.join('  ')) : warn(parts.join('  '));
                                 console.log(dim(`  base: ${img.raw}  ·`) + ' ' + vulnStr);
-                                // Show up to 5 critical/high CVEs
                                 const top = imgVulns
                                     .filter((v) => v.severity === 'CRITICAL' || v.severity === 'HIGH')
                                     .slice(0, 5);
@@ -291,10 +350,13 @@ program
 
                 // ── AI remediation advice ─────────────────────────────────────
                 if (opts.explain && stats.vulnerabilities > 0) {
-                    if (!process.env.DEEPSEEK_API_KEY) {
-                        console.log(warn('--explain requires DEEPSEEK_API_KEY to be set'));
+                    const explainReady = process.env.EXPLAIN_API_KEY ||
+                        (process.env.EXPLAIN_BASE_URL || '').includes('localhost') ||
+                        (process.env.EXPLAIN_BASE_URL || '').includes('127.0.0.1');
+                    if (!explainReady) {
+                        console.log(warn('--explain requires EXPLAIN_API_KEY (Anthropic Claude by default). See https://sbomix.com/docs/explain'));
                     } else {
-                        process.stdout.write('\n  \x1b[2mAsking DeepSeek for remediation advice…\x1b[0m\n');
+                        process.stdout.write('\n  \x1b[2mAsking AI for remediation advice…\x1b[0m\n');
                         try {
                             const kevSet = await fetchKEVSet().catch(() => null);
                             const advice = await explainVulnerabilities(result.components, repoName, kevSet);
@@ -314,18 +376,44 @@ program
                 }
 
                 console.log('');
-
-                let exitCode = 0;
-                if (stats.critical > 0) exitCode = 1;
-                if (opts.licenseCheck && stats.licenseCompliance.forbidden.length > 0) exitCode = 1;
-                if (exitCode) process.exit(exitCode);
             }
 
-        } catch (err) {
+            // ── Push to API ───────────────────────────────────────────────────
+            if (opts.push) {
+                const apiKey = opts.apiKey || process.env.SBOMIX_API_KEY;
+                const apiUrl = opts.apiUrl || process.env.SBOMIX_API_URL || DEFAULT_API_URL;
+                if (!apiKey) {
+                    if (!opts.json) console.log(warn('--push requires --api-key or $SBOMIX_API_KEY'));
+                } else {
+                    try {
+                        const pushed = await pushSbom(result, {
+                            apiUrl, apiKey,
+                            appName: repoName,
+                            version: repoVer,
+                            commit:  commitSha,
+                            branch:  null,
+                        });
+                        if (!opts.json) {
+                            const ref = pushed.sbomId || pushed.scanId || 'accepted';
+                            console.log(ok(`Pushed to ${apiUrl}  →  ${ref}`));
+                        }
+                    } catch (e) {
+                        if (!opts.json) console.log(warn(`Push failed: ${e.message}`));
+                        else process.stderr.write(JSON.stringify({ pushError: e.message }) + '\n');
+                    }
+                }
+            }
+
+            let exitCode = 0;
+            if (stats.critical > 0) exitCode = 1;
+            if (opts.licenseCheck && stats.licenseCompliance?.forbidden?.length > 0) exitCode = 1;
+            if (exitCode && !opts.json) process.exit(exitCode);
+
+        } catch (error) {
             if (!opts.json) {
-                console.error(`\n  \x1b[31mError:\x1b[0m ${err.message}\n`);
+                console.error(`\n  \x1b[31mError:\x1b[0m ${error.message}\n`);
             } else {
-                console.error(JSON.stringify({ error: err.message }));
+                console.error(JSON.stringify({ error: error.message }));
             }
             process.exit(2);
         } finally {

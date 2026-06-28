@@ -27,8 +27,7 @@
   .btn-ghost:hover { color: var(--text); border-color: var(--muted); }
 
   /* ── Auth ── */
-  #auth-screen { display: flex; align-items: center; justify-content: center; min-height: calc(100vh - 57px); }
-  .auth-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 40px; width: 420px; }
+.auth-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 40px; width: 420px; }
   .auth-card h2 { font-size: 20px; margin-bottom: 8px; }
   .auth-card p  { color: var(--muted); margin-bottom: 24px; line-height: 1.5; }
   .auth-input { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 10px 14px; border-radius: 8px; font-family: 'Menlo', 'Consolas', monospace; font-size: 13px; outline: none; transition: border-color .15s; }
@@ -182,16 +181,6 @@
 </header>
 
 <!-- ── Auth ──────────────────────────────────────────────────────────────── -->
-<div id="auth-screen">
-  <div class="auth-card">
-    <h2>Sign in to Dashboard</h2>
-    <p>Enter your SBOMix API key to view your org's SBOM inventory and risk posture.</p>
-    <input class="auth-input" type="password" id="key-input" placeholder="API key" autocomplete="off">
-    <button class="auth-submit" id="auth-btn">Continue</button>
-    <div class="auth-error" id="auth-error">Invalid API key — check and try again.</div>
-  </div>
-</div>
-
 <!-- ── List screen ───────────────────────────────────────────────────────── -->
 <div id="list-screen" class="screen">
 
@@ -234,9 +223,7 @@
         <div style="flex:1;min-width:160px">
           <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:6px">
             GitHub Token <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(private repos)</span>
-          </div>
-          <input type="password" class="search-input" id="scan-token" placeholder="ghp_… (optional)" style="width:100%" autocomplete="off">
-        </div>
+          </div></div>
         <button class="search-btn" id="scan-btn" style="border-color:var(--accent);color:var(--accent)">Scan</button>
       </div>
       <div id="scan-error" style="display:none;margin-top:10px;font-size:13px;color:var(--red)"></div>
@@ -422,7 +409,6 @@
 <script>
 'use strict';
 const API = '';
-let apiKey = '';
 let orgScopes = [];
 let currentApp = null;
 let currentAppMeta = null;
@@ -467,8 +453,10 @@ function ecoTags(arr) {
 async function apiFetch(path, opts = {}) {
   const r = await fetch(API + path, {
     ...opts,
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
   });
+  if (r.status === 401) { window.location.href = '/login'; return; }
   if (!r.ok) { const err = new Error(r.status); err.status = r.status; throw err; }
   return r.json();
 }
@@ -476,14 +464,10 @@ async function apiFetch(path, opts = {}) {
 // ── Navigation ────────────────────────────────────────────────────────────────
 
 function showScreen(id) {
-  for (const s of ['auth-screen', 'list-screen', 'detail-screen']) {
+  for (const s of ['list-screen', 'detail-screen']) {
     const el = document.getElementById(s);
     if (!el) continue;
-    if (s === id) {
-      el.style.display = s === 'auth-screen' ? 'flex' : 'block';
-    } else {
-      el.style.display = 'none';
-    }
+    el.style.display = s === id ? 'block' : 'none';
   }
 }
 
@@ -492,12 +476,7 @@ function showList() {
   showScreen('list-screen');
 }
 
-function logout() {
-  localStorage.removeItem('sbomix_key');
-  apiKey = '';
-  document.getElementById('logout-btn').style.display = 'none';
-  document.getElementById('key-input').value = '';
-  showScreen('auth-screen');
+function logout() {  document.getElementById('logout-btn').style.display = 'none';  showScreen('auth-screen');
 }
 
 // ── Dashboard (list view) ─────────────────────────────────────────────────────
@@ -831,13 +810,13 @@ document.getElementById('explain-btn').addEventListener('click', async () => {
         <div class="explain-label">
           AI Remediation Advice &nbsp;·&nbsp;
           ${data.vulnerabilityCount} vuln${data.vulnerabilityCount !== 1 ? 's' : ''} analysed &nbsp;·&nbsp;
-          DeepSeek-V3
+          Claude Haiku
         </div>
         <pre>${esc(data.explanation)}</pre>`;
     }
     btn.textContent = 'Hide advice';
   } catch {
-    panel.innerHTML = `<span class="c-red">AI explain failed — check that DEEPSEEK_API_KEY is configured on the server.</span>`;
+    panel.innerHTML = `<span class="c-red">AI explain failed — check that EXPLAIN_API_KEY is configured on the server.</span>`;
     panel.classList.remove('open');
     btn.textContent = 'AI Explain';
   }
@@ -1139,7 +1118,7 @@ document.querySelectorAll('.sbom-dl-item').forEach(item => {
     const fmt = item.dataset.fmt;
     const url = `/api/v1/apps/${encodeURIComponent(currentApp)}/sbom/download?format=${fmt}`;
     try {
-      const r = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
+      const r = await fetch(url, { credentials: 'same-origin' });
       if (r.status === 404) {
         const err = await r.json();
         alert(err.error || 'SBOM not available in that format.');
@@ -1261,8 +1240,7 @@ function renderAppsList(apps) {
 
 document.getElementById('scan-btn').addEventListener('click', async () => {
   const repoVal  = document.getElementById('scan-repo').value.trim();
-  const tokenVal = document.getElementById('scan-token').value.trim();
-  const errEl    = document.getElementById('scan-error');
+const errEl    = document.getElementById('scan-error');
   const btn      = document.getElementById('scan-btn');
 
   errEl.style.display = 'none';
@@ -1276,11 +1254,8 @@ document.getElementById('scan-btn').addEventListener('click', async () => {
   btn.textContent = 'Starting…';
 
   try {
-    const body = { repo: repoVal };
-    if (tokenVal) body.token = tokenVal;
-    await apiFetch('/api/v1/scan', { method: 'POST', body: JSON.stringify(body) });
+    const body = { repo: repoVal };    await apiFetch('/api/v1/scan', { method: 'POST', body: JSON.stringify(body) });
     document.getElementById('scan-repo').value  = '';
-    document.getElementById('scan-token').value = '';
     await loadScanJobs();
   } catch (err) {
     errEl.textContent = err.status === 429
@@ -1493,45 +1468,11 @@ document.getElementById('delete-confirm-btn').addEventListener('click', async ()
   }
 });
 
-// ── Auth ──────────────────────────────────────────────────────────────────────
-
-async function tryAuth(key) {
-  const errEl = document.getElementById('auth-error');
-  const btn   = document.getElementById('auth-btn');
-  errEl.style.display = 'none';
-  btn.disabled = true;
-  btn.textContent = 'Connecting…';
-  try {
-    const r = await fetch(API + '/api/v1/apps', {
-      headers: { Authorization: `Bearer ${key}` }
-    });
-    if (!r.ok) throw new Error('invalid');
-    apiKey = key;
-    localStorage.setItem('sbomix_key', key);
-    loadDashboard();
-  } catch {
-    errEl.style.display = 'block';
-  }
-  btn.disabled = false;
-  btn.textContent = 'Continue';
-}
-
-document.getElementById('auth-btn').addEventListener('click', () => {
-  const k = document.getElementById('key-input').value.trim();
-  if (k) tryAuth(k);
-});
-document.getElementById('key-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter') document.getElementById('auth-btn').click();
-});
 document.getElementById('logout-btn').addEventListener('click', logout);
 document.getElementById('back-btn').addEventListener('click', showList);
-document.getElementById('logo').addEventListener('click', () => {
-  if (apiKey) showList();
-});
+document.getElementById('logo').addEventListener('click', showList);
 
-// Auto-login from localStorage
-const saved = localStorage.getItem('sbomix_key');
-if (saved) { apiKey = saved; loadDashboard(); }
+loadDashboard();
 </script>
 </body>
 </html>

@@ -34,15 +34,11 @@ SBOM Research.txt
 /bom.spdx.json
 
 # Scratch / one-off analysis files
-packrai_line_refs.txt
-packrai_perf_check.js
-packrai_perf_check.json
+perf_check.js
+perf_check.json
 
 # Stripe exports
 Stripe.txt
-
-# Landing page — separate deployment, not part of the npm package
-packrai.xyz/
 
 # VPS environment file — contains server credentials
 deploy/vps.env

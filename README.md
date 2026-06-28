@@ -3,7 +3,7 @@
 
   <h1>SBOMix</h1>
 
-  <p><strong>Generate accurate, compliant SBOMs from any project — in one command.</strong></p>
+  <p><strong>Generate CycloneDX, SPDX, and AI-BOM from any project in one command.</strong></p>
 
   [![npm](https://img.shields.io/npm/v/sbomix?color=00c851&logo=npm&logoColor=white)](https://www.npmjs.com/package/sbomix)
   [![CI](https://github.com/RunTimeAdmin/sbomix/actions/workflows/ci.yml/badge.svg)](https://github.com/RunTimeAdmin/sbomix/actions/workflows/ci.yml)
@@ -17,9 +17,9 @@
 npx sbomix RunTimeAdmin/myapp@v2.1.0
 ```
 
-Produces **CycloneDX 1.6** and **SPDX 2.3** in under 500ms. No Docker. No agents. No config files.
+Produces **CycloneDX 1.6**, **SPDX 2.3**, and **AI-BOM** in under 500ms. No Docker. No agents. No config files.
 
-> **☁️ Prefer it hosted?** Skip the Postgres setup — [**sbomix.com**](https://sbomix.com) is the managed platform: a web dashboard, CVE blast-radius search across every repo, AI-BOM, and SBOM history. Free plan, paid from $19/mo with a 14-day trial. [**Get started free →**](https://api.sbomix.com/register)
+> **☁️ Prefer it hosted?** Skip the Postgres setup. [**sbomix.com**](https://sbomix.com) is the managed platform: a web dashboard, CVE blast-radius search across every repo, AI-BOM, and SBOM history. Free plan, paid from $19/mo with a 14-day trial. [**Get started free →**](https://api.sbomix.com/register)
 
 ---
 
@@ -38,7 +38,7 @@ npx sbomix ./my-project
 # Private repo (uses $GITHUB_TOKEN automatically)
 npx sbomix owner/private-repo
 
-# Diff two SBOMs — see what changed between releases
+# Diff two SBOMs: see what changed between releases
 npx sbomix diff old.cyclonedx.json new.cyclonedx.json
 
 # Check for forbidden/restricted licenses
@@ -47,17 +47,21 @@ npx sbomix . --license-check
 # Skip vulnerability lookup (faster, offline-safe)
 npx sbomix owner/repo --no-vulns
 
-# AI remediation advice — explains vulns and produces a prioritised fix plan
-DEEPSEEK_API_KEY=sk-... npx sbomix . --explain
+# AI remediation advice (Anthropic Claude Haiku by default, EU/US data residency)
+EXPLAIN_API_KEY=sk-ant-... npx sbomix . --explain
 
-# AI explain with CISA KEV context — flags actively-exploited vulns
-DEEPSEEK_API_KEY=sk-... KATZILLA_API_KEY=kz_... npx sbomix . --explain
+# AI explain with CISA KEV context: flags actively-exploited vulns
+EXPLAIN_API_KEY=sk-ant-... KATZILLA_API_KEY=kz_... npx sbomix . --explain
+
+# Self-hosted via Ollama (no data leaves your machine)
+EXPLAIN_BASE_URL=http://localhost:11434/v1 EXPLAIN_MODEL=llama3.2 npx sbomix . --explain
 ```
 
 Output files written to the current directory:
 ```
 bom.cyclonedx.json   ← CycloneDX 1.6
 bom.spdx.json        ← SPDX 2.3
+aibom.json           ← AI-BOM (only when AI/ML components are detected)
 ```
 
 ---
@@ -81,7 +85,7 @@ flowchart LR
         E --> G[Enrich: vulns\nOSV batch API]
         DF --> BV[Base image CVEs\nDocker SBOM attestation]
         G --> N[CISA KEV flag\nkatzilla.dev]
-        G --> O[AI explain\nDeepSeek-V3]
+        G --> O[AI explain\nClaude / Ollama]
     end
 
     subgraph output["Output"]
@@ -89,6 +93,7 @@ flowchart LR
         H[CycloneDX 1.6]
         I[SPDX 2.3]
         J[Quality score 0–100]
+        K[AI-BOM]
     end
 
     subgraph platform["Central Platform (optional)"]
@@ -104,7 +109,7 @@ flowchart LR
     output -->|ingest| platform
 ```
 
-Lock files are the resolved dependency graph — authoritative, deterministic, and exact. SBOMix reads them directly instead of walking the filesystem, which is why it's 60–187× faster than Syft and Trivy on equivalent repos.
+Lock files are the resolved dependency graph: authoritative, deterministic, and exact. SBOMix reads them directly instead of walking the filesystem, which is why it's 60–187× faster than Syft and Trivy on equivalent repos.
 
 ---
 
@@ -126,6 +131,7 @@ Lock files are the resolved dependency graph — authoritative, deterministic, a
 | **AI remediation** | ✅ | ❌ | ❌ |
 | **Dockerfile audit** | ✅ | ❌ | ❌ |
 | **Base image CVEs** | ✅ (no Docker) | ❌ | ✅ (requires Docker) |
+| **AI-BOM** | ✅ | ❌ | ❌ |
 
 ### Benchmark Results
 
@@ -135,7 +141,7 @@ Lock files are the resolved dependency graph — authoritative, deterministic, a
 | `psf/requests` | Python | **251ms** | 9 330ms | 10 502ms |
 | `BurntSushi/ripgrep` | Rust | **268ms** | 11 823ms | 15 425ms |
 
-Syft and Trivy run via Docker in this benchmark, adding ~3–5s of startup overhead. Native installs would be somewhat faster — but still an order of magnitude slower on lock-file repos. Reproduce with `npm run bench`.
+Syft and Trivy run via Docker in this benchmark, adding ~3–5s of startup overhead. Native installs would be somewhat faster, but still an order of magnitude slower on lock-file repos. Reproduce with `npm run bench`.
 
 ---
 
@@ -151,7 +157,7 @@ Every component is checked against the [OSV database](https://osv.dev) in a sing
 ```bash
 npx sbomix . --license-check
 ```
-Categorises each component's license as **permissive**, **notice**, **restricted** (weak copyleft — review required), or **forbidden** (strong copyleft). Exits `1` if any forbidden license is found. Produces a license compliance score 0–100.
+Categorises each component's license as **permissive**, **notice**, **restricted** (weak copyleft, review required), or **forbidden** (strong copyleft). Exits `1` if any forbidden license is found. Produces a license compliance score 0–100.
 
 ### SBOM Diffing
 ```bash
@@ -162,22 +168,124 @@ Shows exactly what changed between two releases: components added/removed/update
 ### VEX Support
 Mark vulnerabilities as `not_affected`, `fixed`, `affected`, or `under_investigation` via the API. `not_affected` statements suppress vulns from risk reports, keeping dashboards signal-rich.
 
+### AI-BOM
+
+No standard SBOM tool inventories your AI/ML stack. SBOMix does. When AI or ML components are detected (model files, HuggingFace packages, PyTorch, TensorFlow, LangChain, Transformers, MCP server configs), SBOMix generates a third output alongside the SBOM:
+
+```
+aibom.json
+```
+
+The AI-BOM captures everything an auditor or regulator needs to assess AI supply-chain risk:
+
+- **Model provenance**: source, commit SHA, HuggingFace Hub metadata, SHA-256 hash of local weight files
+- **Training data lineage**: dataset identity, version, and licensing
+- **EU AI Act Annex IV fields**: purpose, intended use, capability description, risk classification
+- **ISO 42001 control mapping**: 8 Annex A controls mapped to BOM evidence, with gap identification
+- **Agentic context**: MCP server inventory, tool authority scope, and a **Least Agency Score** (0–100) measuring agent blast radius
+- **PQC-signed hash chain**: tamper-evident lineage using SHAKE-256 (post-quantum ready)
+
+**Sample output**
+
+```json
+{
+  "bomFormat": "SBOMix-AIBOM",
+  "specVersion": "sbomix-aibom/1.0",
+  "generatedAt": "2026-06-27T10:00:00Z",
+  "subject": { "name": "my-app", "version": "1.4.0" },
+  "summary": {
+    "aiModels": 1, "apiProviders": 1, "frameworks": 3,
+    "mcpServers": 2, "leastAgencyScore": 38,
+    "criticalThreats": 1, "highThreats": 2
+  },
+  "threats": [
+    {
+      "id": "AI-001", "severity": "CRITICAL",
+      "name": "Unsafe serialization (pickle)",
+      "component": "model.pt",
+      "finding": "pytorch_model.bin uses Python pickle, which executes arbitrary code at load time"
+    },
+    {
+      "id": "AI-009", "severity": "HIGH",
+      "name": "Excessive agency (broad tool authority)",
+      "finding": "filesystem MCP server scoped to /; violates Least Agency Principle"
+    }
+  ],
+  "agentic": {
+    "mcpServers": 2,
+    "boundaries": { "leastAgencyScore": 38, "issues": ["filesystem root access", "unpinned npx server"] }
+  },
+  "compliance": {
+    "summary": { "total": 14, "satisfied": 9, "gaps": 5, "coveragePct": 64 }
+  },
+  "lineageVerification": { "verified": true, "algorithm": "SHAKE-256" }
+}
+```
+
+**Threat catalogue**
+
+SBOMix assesses 12 AI-specific supply-chain threats that no standard SBOM scanner catches:
+
+| ID | Severity | Threat |
+|----|----------|--------|
+| AI-001 | CRITICAL | Unsafe pickle serialization (`.pt`/`.bin` executes arbitrary code at load time) |
+| AI-002 | HIGH | Model weights with no integrity proof (tampered weights change behaviour silently) |
+| AI-003 | HIGH | Unverified training data (data-poisoning backdoors survive to production) |
+| AI-004 | MEDIUM | Missing model provenance (cannot trace artifact to a published registry entry) |
+| AI-005 | HIGH | Unpinned `from_pretrained()` (model changes upstream without any code change) |
+| AI-006 | MEDIUM | Restrictive model license: RAIL, CC-BY-NC, Llama community (legal risk in production) |
+| AI-007 | LOW | External AI API dependency (provider outage or policy change breaks production) |
+| AI-008 | HIGH | Uncontrolled fine-tuning pipeline (insider can retrain with poisoned data and redeploy) |
+| AI-009 | HIGH | Excessive agent authority: broad filesystem/shell MCP violates Least Agency Principle (OWASP 2026) |
+| AI-010 | MEDIUM | Unpinned MCP server via `npx`/`uvx` (tool code changes between runs with no review) |
+| AI-011 | MEDIUM | Unauthenticated networked MCP server |
+| AI-012 | LOW | System-prompt / agent-rule files (unversioned behaviour-control surface) |
+
+**Compliance mapping**
+
+The AI-BOM maps evidence to 14 controls across ISO/IEC 42001:2023 and the EU AI Act:
+
+| Control | Regime | What it checks |
+|---------|--------|----------------|
+| A.7.2 | ISO 42001 | Training data provenance and quality |
+| A.7.4 | ISO 42001 | Data provenance recording per data source |
+| A.6.2.4 | ISO 42001 | Verification and validation records before deployment |
+| A.6.2.6 | ISO 42001 | Model version promoted to production |
+| A.10.2 | ISO 42001 | Third-party model, dataset, and AI service inventory |
+| A.10.3 | ISO 42001 | Supply-chain risk assessment for pretrained models |
+| A.6.2.8 | ISO 42001 | Agent authority scope (Least Agency) |
+| Art. 12(1) | EU AI Act | Automatic event log over the system's lifetime |
+| Art. 12(2) | EU AI Act | Tamper-evident lineage linking outputs to model and data versions |
+| Art. 12(3) | EU AI Act | Cryptographic identification of dataset and model versions |
+| Art. 15 | EU AI Act | Controls against model and data tampering |
+| Art. 53(1)(a) | EU AI Act | GPAI technical documentation (architecture, parameters) |
+| Art. 53(1)(c) | EU AI Act | Copyright policy and lawful dataset use |
+| Art. 53(1)(d) | EU AI Act | Training content summary and dataset inventory |
+
+Add `--aibom-format yaml` to write `aibom.yaml` instead of JSON. When no AI/ML components are detected, no AI-BOM file is written and the `aibom-path` action output is omitted.
+
 ### CISA KEV Enrichment
-Every vulnerability is automatically cross-referenced against the [CISA Known Exploited Vulnerabilities catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) (1,600+ entries, refreshed daily). Vulns on the KEV list are flagged `kev: true` in the database and surfaced in the AI explain output as highest priority — because being actively exploited in the wild is categorically different from a theoretical CVSS score.
+Every vulnerability is automatically cross-referenced against the [CISA Known Exploited Vulnerabilities catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) (1,600+ entries, refreshed daily). Vulns on the KEV list are flagged `kev: true` in the database and surfaced in the AI explain output as highest priority. Being actively exploited in the wild is categorically different from a theoretical CVSS score.
 
 Requires `KATZILLA_API_KEY` ([katzilla.dev](https://katzilla.dev)). The catalog is fetched once at API startup then refreshed every 24 hours. New vulns are cross-referenced immediately at ingest time without waiting for the refresh cycle.
 
 ### AI Remediation Advice
 ```bash
-DEEPSEEK_API_KEY=sk-... npx sbomix . --explain
+# Default: Anthropic Claude Haiku (EU/US data residency)
+EXPLAIN_API_KEY=sk-ant-... npx sbomix . --explain
+
+# Self-hosted via Ollama (no data leaves your machine)
+EXPLAIN_BASE_URL=http://localhost:11434/v1 EXPLAIN_MODEL=llama3.2 npx sbomix . --explain
 ```
-After scanning, sends your vulnerability list to [DeepSeek-V3](https://platform.deepseek.com) and returns:
+After scanning, sends your vulnerability list to the configured AI provider and returns:
 - 2–3 sentence plain-English risk summary
 - Prioritised upgrade plan ordered by impact (most vulns resolved per change first)
 - Specific mitigation guidance for vulns with no fix available
 - CISA KEV callouts for actively-exploited entries
 
-Available both as a CLI flag (`--explain`) and as a REST endpoint (`POST /api/v1/apps/:name/explain`). Requires `DEEPSEEK_API_KEY`. The API endpoint returns `501` if the key is not configured, so it degrades gracefully.
+Default provider is **Anthropic Claude Haiku** (vulnerability data stays in EU/US jurisdiction). For air-gapped or self-hosted deployments, use Ollama. Any OpenAI-compatible endpoint is supported via `EXPLAIN_BASE_URL` + `EXPLAIN_API_KEY` + `EXPLAIN_MODEL`.
+
+Available both as a CLI flag (`--explain`) and as a REST endpoint (`POST /api/v1/apps/:name/explain`). Requires `EXPLAIN_API_KEY` (or a localhost `EXPLAIN_BASE_URL` for Ollama). The API endpoint returns `501` if not configured.
 
 ### Dockerfile Security Audit
 
@@ -197,7 +305,7 @@ Multi-stage builds are detected. Use `--no-docker` to skip Dockerfile scanning e
 
 ### Base Image CVE Lookup
 
-For Docker Official Images (`node`, `nginx`, `python`, `ubuntu`, etc.), SBOMix pulls the SBOM attestation directly from the Docker Hub OCI registry and queries OSV for known CVEs — with no Docker installation required.
+For Docker Official Images (`node`, `nginx`, `python`, `ubuntu`, etc.), SBOMix pulls the SBOM attestation directly from the Docker Hub OCI registry and queries OSV for known CVEs, with no Docker installation required.
 
 ```
 Dockerfile  ·  2 MEDIUM  1 LOW  · multi-stage
@@ -266,6 +374,7 @@ On every pull request, SBOMix will:
 | `api-url` | `""` | SBOMix central API endpoint |
 | `api-key` | `""` | SBOMix API key (`secrets.SBOMIX_API_KEY`) |
 | `directory` | `.` | Directory to scan |
+| `aibom-format` | `json` | AI-BOM output format: `json` or `yaml` |
 
 ### Action Outputs
 
@@ -277,6 +386,9 @@ On every pull request, SBOMix will:
 | `vulnerability-count` | Total known vulnerabilities |
 | `critical-count` | Critical severity vulnerabilities (CVSS ≥ 9.0) |
 | `quality-score` | SBOM completeness score 0–100 |
+| `aibom-path` | Path to generated AI-BOM (only present when AI/ML components are detected) |
+| `ai-model-count` | Number of AI/ML model components detected |
+| `ai-threat-count` | Number of AI/ML threats detected |
 
 ### With Central Tracking
 
@@ -315,7 +427,7 @@ When `api-url` and `api-key` are set, SBOMs are automatically pushed to your SBO
 | **Swift** | `Package.resolved` | ⚠️ Direct only | Git SHA hashes |
 | **Dart/Flutter** | `pubspec.lock` | ⚠️ Direct only | SHA-256 hashes |
 
-Monorepos are supported — SBOMix recurses up to 4 directories deep and deduplicates lock files per directory.
+Monorepos are supported. SBOMix recurses up to 4 directories deep and deduplicates lock files per directory.
 
 ---
 
@@ -336,7 +448,7 @@ Scan options:
   --token <token>       GitHub token for private repos (or set $GITHUB_TOKEN)
   --format <fmt>        both | cyclonedx | spdx  (default: both)
   --license-check       Flag forbidden/restricted licenses; exit 1 if any found
-  --explain             AI remediation advice via DeepSeek-V3 (requires DEEPSEEK_API_KEY)
+  --explain             AI remediation advice via Claude by default (requires EXPLAIN_API_KEY)
   --no-vulns            Skip OSV vulnerability enrichment
   --no-licenses         Skip deps.dev license enrichment
   --no-docker           Skip Dockerfile audit and base image CVE lookup
@@ -353,7 +465,7 @@ Diff options:
 |------|---------|
 | `0` | Success |
 | `1` | Critical vulnerabilities found, or forbidden license detected (`--license-check`) |
-| `2` | Fatal error — no lock files, clone failed, or unrecoverable parse error |
+| `2` | Fatal error: no lock files, clone failed, or unrecoverable parse error |
 
 ---
 
@@ -409,7 +521,7 @@ Both formats include all CISA 2025 minimum elements, full transitive dependency 
 
 ## Central Platform (Self-Hosted)
 
-> Don't want to run this yourself? The same platform is available fully managed at [sbomix.com](https://sbomix.com) — no Postgres, no server, free to start.
+> Don't want to run this yourself? The same platform is available fully managed at [sbomix.com](https://sbomix.com). No Postgres, no server, free to start.
 
 The SBOMix API server answers org-wide questions like:
 
@@ -427,7 +539,7 @@ flowchart TD
         D[Report endpoint]
         E[VEX endpoint]
         F[Diff endpoint]
-        P[Explain endpoint\nDeepSeek-V3]
+        P[Explain endpoint\n(Claude / Ollama)]
     end
 
     subgraph db["PostgreSQL"]
@@ -502,7 +614,7 @@ sbomix/
 │   ├── github.js           GitHub URL parsing + shallow clone
 │   ├── osv.js              OSV vulnerability enrichment (batch API)
 │   ├── kev.js              CISA KEV catalog sync (katzilla.dev, daily refresh)
-│   ├── explain.js          AI remediation advice (DeepSeek-V3 via OpenAI SDK)
+│   ├── explain.js          AI remediation advice (Claude Haiku by default; any OpenAI-compatible provider)
 │   ├── licenses.js         License enrichment (deps.dev API)
 │   ├── basevuln.js         Base image CVE lookup via Docker SBOM attestations (OCI + OSV)
 │   ├── parsers/
@@ -542,7 +654,7 @@ sbomix/
 
 ### Adding a New Ecosystem
 
-1. Write `src/parsers/<ecosystem>.js` — export a `parse*` function returning `Component[]`
+1. Write `src/parsers/<ecosystem>.js`: export a `parse*` function returning `Component[]`
 2. Add detection entry in `src/parsers/detect.js` (`LOCK_FILE_BY_NAME`)
 3. Add dispatcher case in `src/parsers/index.js`
 4. Add `case '<ecosystem>'` in `src/component.js` `makePurl()`
@@ -560,6 +672,8 @@ sbomix/
 | [CISA Minimum Elements](https://www.cisa.gov/resources-tools/resources/software-bill-materials-sbom) | 2025 | ✅ purl, hashes, licenses, relationships, metadata |
 | [EO 14028](https://www.whitehouse.gov/briefing-room/presidential-actions/2021/05/12/executive-order-on-improving-the-nations-cybersecurity/) | — | ✅ Supply chain security |
 | [OpenVEX / CycloneDX VEX](https://www.cisa.gov/sites/default/files/2023-04/minimum-requirements-for-vex_508c.pdf) | — | ✅ Via API |
+| [EU Cyber Resilience Act](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A52022PC0454) | 2026 | ✅ CycloneDX 1.6 attestation, NTIA minimum elements |
+| [EU AI Act](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A32024R1689) | Art. 11 / Annex IV | ✅ AI-BOM with provenance, capabilities, risk classification |
 
 ---
 
@@ -573,7 +687,7 @@ SBOMix is a **lock-file-first** SBOM generator. This makes it fast and determini
 | **Compiled binaries** | SBOMs are generated from lock files, not compiled output or vendored binaries. |
 | **No lock file → no SBOM** | `requirements.txt` produces direct-only output with a warning. Projects without any committed lock file are not supported. |
 | **Java (Maven)** | Transitive resolution requires `mvn` to be installed locally. Without it, direct deps only. |
-| **Swift / Dart** | Flat resolved set only — no dependency graph available in the lock file format. |
+| **Swift / Dart** | Flat resolved set only. No dependency graph available in the lock file format. |
 | **Gradle** | Requires `--write-locks` to produce `gradle.lockfile`. |
 | **.NET** | Requires `RestorePackagesWithLockFile=true` and a committed `packages.lock.json`. |
 
@@ -581,4 +695,4 @@ SBOMix is a **lock-file-first** SBOM generator. This makes it fast and determini
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+MIT. See [LICENSE](LICENSE).

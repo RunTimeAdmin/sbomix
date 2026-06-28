@@ -132,8 +132,11 @@ router.get('/api/v1/apps/:name/diff', requireScope('sbom:read'), async (req, res
 });
 
 router.post('/api/v1/apps/:name/explain', requireScope('sbom:read'), async (req, res) => {
-    if (!process.env.DEEPSEEK_API_KEY) {
-        return res.status(501).json({ error: 'AI explain is not configured on this server (DEEPSEEK_API_KEY not set)' });
+    const explainReady = process.env.EXPLAIN_API_KEY ||
+        (process.env.EXPLAIN_BASE_URL || '').includes('localhost') ||
+        (process.env.EXPLAIN_BASE_URL || '').includes('127.0.0.1');
+    if (!explainReady) {
+        return res.status(501).json({ error: 'AI explain is not configured on this server (EXPLAIN_API_KEY not set)' });
     }
     try {
         const app = await appsRepo.findByName(db, req.org.id, req.params.name);

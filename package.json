@@ -1,7 +1,7 @@
 {
   "name": "sbomix",
   "version": "0.3.1",
-  "description": "Fast, accurate SBOM generation from GitHub repos and local lock files — including AI-BOM",
+  "description": "Fast, accurate SBOM generation from GitHub repos and local lock files, including AI-BOM",
   "homepage": "https://sbomix.com",
   "repository": {
     "type": "git",
@@ -12,8 +12,7 @@
   },
   "main": "src/pipeline.js",
   "bin": {
-    "sbomix": "bin/sbomix.js",
-    "packrai": "bin/packrai.js"
+    "sbomix": "bin/sbomix.js"
   },
   "type": "commonjs",
   "scripts": {
