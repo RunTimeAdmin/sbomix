@@ -649,6 +649,16 @@ function detectAILocal(dir, pythonComponents = [], opts = {}) {
 // usable result. Mutates the target components in place and returns the threats
 // that can only be determined from Hub metadata (provenance, restricted license).
 
+// Run `fn` over every item in `items` with at most `limit` in-flight at once.
+async function withConcurrency(items, limit, fn) {
+    const queue = [...items];
+    await Promise.all(
+        Array.from({ length: Math.min(limit, items.length) }, async () => {
+            while (queue.length) await fn(queue.shift());
+        }),
+    );
+}
+
 /**
  * @param {Array<{ modelId, comp }>} enrichTargets - from detectAILocal()
  * @param {object} [opts] - { timeout }
@@ -657,7 +667,7 @@ function detectAILocal(dir, pythonComponents = [], opts = {}) {
 async function enrichAIComponents(enrichTargets = [], opts = {}) {
     const extraThreats    = [];
     const extraComponents = [];   // standalone dataset components discovered via Hub
-    await Promise.all(enrichTargets.map(async ({ modelId, comp }) => {
+    await withConcurrency(enrichTargets, 10, async ({ modelId, comp }) => {
         // Hub metadata + README model card fetched in parallel
         const [meta, considerations] = await Promise.all([
             fetchHFMeta(modelId, opts),
@@ -685,7 +695,7 @@ async function enrichAIComponents(enrichTargets = [], opts = {}) {
                 ...considerations.considerations,
             };
         }
-    }));
+    });
     return { threats: extraThreats, components: extraComponents };
 }
 
