@@ -152,8 +152,8 @@ const THREATS = {
         id: 'AI-009', severity: 'HIGH',
         name: 'Excessive agency (broad tool authority)',
         description:
-            'An agent/MCP configuration grants broad authority — shell execution, ' +
-            'unrestricted filesystem access, or danger flags that bypass confirmation. ' +
+            'An agent/MCP configuration grants broad authority: shell execution, ' +
+            'filesystem access without explicit path constraints, or danger flags that bypass confirmation. ' +
             'This violates the Least Agency Principle (OWASP 2026): a compromised or ' +
             'prompt-injected model inherits that authority directly.',
         mitigations: [
