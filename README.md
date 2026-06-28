@@ -6,8 +6,8 @@
   <p><strong>Generate CycloneDX, SPDX, and AI-BOM from any project in one command.</strong></p>
 
   [![npm](https://img.shields.io/npm/v/sbomix?color=00c851&logo=npm&logoColor=white)](https://www.npmjs.com/package/sbomix)
-  [![CI](https://github.com/RunTimeAdmin/sbomix/actions/workflows/ci.yml/badge.svg)](https://github.com/RunTimeAdmin/sbomix/actions/workflows/ci.yml)
-  [![SBOM](https://github.com/RunTimeAdmin/sbomix/actions/workflows/sbom.yml/badge.svg)](https://github.com/RunTimeAdmin/sbomix/actions/workflows/sbom.yml)
+  [![CI](https://github.com/RunTimeAdmin/sbomix-private/actions/workflows/ci.yml/badge.svg)](https://github.com/RunTimeAdmin/sbomix-private/actions/workflows/ci.yml)
+  [![SBOM](https://github.com/RunTimeAdmin/sbomix-private/actions/workflows/sbom.yml/badge.svg)](https://github.com/RunTimeAdmin/sbomix-private/actions/workflows/sbom.yml)
   [![License: MIT](https://img.shields.io/badge/license-MIT-00c851)](LICENSE)
   [![CycloneDX 1.6](https://img.shields.io/badge/CycloneDX-1.6-blueviolet)](https://cyclonedx.org)
   [![SPDX 2.3](https://img.shields.io/badge/SPDX-2.3-blue)](https://spdx.dev)
@@ -222,6 +222,8 @@ The AI-BOM captures everything an auditor or regulator needs to assess AI supply
 }
 ```
 
+`aiModels` counts local weight files (`.pt`, `.safetensors`, `.pkl`, `config.json`) — these carry provenance and RCE risk. `apiProviders` counts external-API integrations (`openai`, `anthropic`, `boto3`) — these carry data-residency and availability risk. The two are separate inventory categories with different threat profiles.
+
 **Threat catalogue**
 
 SBOMix assesses 12 AI-specific supply-chain threats that no standard SBOM scanner catches:
@@ -261,6 +263,21 @@ The AI-BOM maps evidence to 14 controls across ISO/IEC 42001:2023 and the EU AI 
 | Art. 53(1)(a) | EU AI Act | GPAI technical documentation (architecture, parameters) |
 | Art. 53(1)(c) | EU AI Act | Copyright policy and lawful dataset use |
 | Art. 53(1)(d) | EU AI Act | Training content summary and dataset inventory |
+
+Each control in the `compliance.controls` array carries the specific evidence found (or not found), so an auditor sees exactly what was checked and why a control is satisfied or a gap:
+
+```json
+{
+  "control": "EUAIACT:Art12.3",
+  "regime": "EU AI Act (Reg. 2024/1689)",
+  "title": "Article 12(3) — Recording of reference data and version identification",
+  "expects": "cryptographic identification of dataset and model versions",
+  "status": "gap",
+  "detail": "lineage not cryptographically signed"
+}
+```
+
+The `summary.disclaimer` field in the output states explicitly: "Evidence-to-control mapping only. Not a certification or legal conformity assessment." Controls map what the BOM can observe to what the standard requires. Gaps point at missing documentation, not failing controls.
 
 Add `--aibom-format yaml` to write `aibom.yaml` instead of JSON. When no AI/ML components are detected, no AI-BOM file is written and the `aibom-path` action output is omitted.
 
@@ -591,7 +608,7 @@ See [`src/api/schema.sql`](src/api/schema.sql) for the full database schema.
 ## Development
 
 ```bash
-git clone https://github.com/RunTimeAdmin/sbomix
+git clone https://github.com/RunTimeAdmin/sbomix-private
 cd sbomix
 npm install
 
