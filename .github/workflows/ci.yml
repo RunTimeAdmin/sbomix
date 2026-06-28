@@ -45,6 +45,21 @@ jobs:
       - run: npm ci
       - run: npm run lint
 
+  pack:
+    name: Pack (publishability check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+      - name: Dry-run npm pack
+        run: npm pack --dry-run
+
   cli-smoke:
     name: CLI smoke test
     runs-on: ubuntu-latest
@@ -58,15 +73,43 @@ jobs:
 
       - run: npm ci
 
-      - name: Scan fixture directory
+      - name: Scan fixture directory (standard)
         run: |
           node bin/sbomix.js ./tests/fixtures --no-vulns --no-licenses --json --out /tmp/sbomix-out
           test -f /tmp/sbomix-out/bom.cyclonedx.json
           test -f /tmp/sbomix-out/bom.spdx.json
-          echo "CycloneDX and SPDX files generated successfully"
 
       - name: Verify component count
         run: |
           COUNT=$(node -e "const f=require('/tmp/sbomix-out/bom.cyclonedx.json'); console.log(f.components.length)")
           echo "Component count: $COUNT"
           [ "$COUNT" -gt 10 ] || (echo "Expected >10 components, got $COUNT" && exit 1)
+
+      - name: Scan AI fixture and verify AI-BOM output
+        run: |
+          node bin/sbomix.js ./tests/fixtures/ai \
+            --no-vulns --no-licenses --json --out /tmp/ai-out \
+            > /tmp/ai-summary.json
+
+          # aibom.json must be written (triggered by ML packages in requirements.txt)
+          test -f /tmp/ai-out/aibom.json || (echo "aibom.json not written by CLI" && exit 1)
+
+          # aibom must have detected AI components (not just empty)
+          AI_COMPS=$(jq -r '.components | length' /tmp/ai-out/aibom.json)
+          echo "AI components in aibom.json: $AI_COMPS"
+          [ "$AI_COMPS" -gt 0 ] || (echo "Expected AI components in aibom.json, got $AI_COMPS" && exit 1)
+
+          echo "Threats: $(jq -r '.threats | length' /tmp/ai-out/aibom.json)"
+
+  semgrep:
+    name: Semgrep (security static analysis)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install semgrep
+        run: pip install semgrep
+      - name: Scan for security issues
+        run: semgrep scan --config=p/nodejs --config=p/secrets --severity=ERROR --error src/ bin/

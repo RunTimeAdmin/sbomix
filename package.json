@@ -1,14 +1,14 @@
 {
   "name": "sbomix",
   "version": "0.3.1",
-  "description": "Fast, accurate SBOM generation from GitHub repos and local lock files, including AI-BOM",
+  "description": "Fast, accurate SBOM generation from GitHub repos and local lock files",
   "homepage": "https://sbomix.com",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/RunTimeAdmin/sbomix.git"
+    "url": "git+https://github.com/RunTimeAdmin/sbomix-private.git"
   },
   "bugs": {
-    "url": "https://github.com/RunTimeAdmin/sbomix/issues"
+    "url": "https://github.com/RunTimeAdmin/sbomix-private/issues"
   },
   "main": "src/pipeline.js",
   "bin": {
@@ -21,7 +21,8 @@
     "e2e": "node scripts/e2e.js",
     "bench": "node scripts/benchmark.js",
     "lint": "eslint src/ bin/",
-    "test:parsers": "node --test tests/parsers.test.js"
+    "test:parsers": "node --test tests/parsers.test.js",
+    "audit:deps": "npm audit --omit=dev --audit-level=high"
   },
   "dependencies": {
     "commander": "^12.1.0",
@@ -41,11 +42,8 @@
     "sbom",
     "cyclonedx",
     "spdx",
-    "aibom",
-    "ai-bom",
     "supply-chain",
-    "security",
-    "sbomix"
+    "security"
   ],
   "license": "MIT"
 }
