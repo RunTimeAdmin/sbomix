@@ -117,7 +117,7 @@ Lock files are the resolved dependency graph: authoritative, deterministic, and 
 
 | | SBOMix | Syft | Trivy |
 |---|---|---|---|
-| **Speed** | **250–465ms** | 9–28s | 10–87s |
+| **Speed** | **268–463ms** | 9–28s | 10–87s |
 | **Approach** | Lock-file parsing | Filesystem scan | Filesystem + image scan |
 | **Transitives** | Full graph | Partial | Partial |
 | **Dep graph** | ✅ | ✅ | ❌ |
@@ -138,8 +138,9 @@ Lock files are the resolved dependency graph: authoritative, deterministic, and 
 | Repo | Ecosystem | SBOMix | Syft | Trivy |
 |------|-----------|--------|------|-------|
 | `nestjs/nest` | npm | **463ms** | 27 731ms | 86 550ms |
-| `psf/requests` | Python | **251ms** | 9 330ms | 10 502ms |
 | `BurntSushi/ripgrep` | Rust | **268ms** | 11 823ms | 15 425ms |
+
+`psf/requests` was dropped from this table: `requests` doesn't commit a lock file for its own runtime dependencies, so the only `requirements.txt` SBOMix finds is `docs/requirements.txt` (a single Sphinx pin for the documentation build). The 251ms figure was real, but it wasn't measuring what the table implied. A verified Python entry with a genuine multi-dependency lock file will be added back once one is found — many popular Python libraries don't commit lock files by convention, since that's a decision left to the consuming application.
 
 Syft and Trivy run via Docker in this benchmark, adding ~3–5s of startup overhead. Native installs would be somewhat faster, but still an order of magnitude slower on lock-file repos. Reproduce with `npm run bench`.
 
