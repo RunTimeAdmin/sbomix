@@ -24,9 +24,9 @@ before(async () => {
 
     await db.query(`DELETE FROM scan_jobs WHERE repo LIKE 'sbomix-test/%'`);
     await db.query(`DELETE FROM sboms WHERE org_id IN (
-        SELECT id FROM organizations WHERE email = 'integration-test@sbomix.test'
+        SELECT id FROM organizations WHERE email LIKE 'integration-test%@sbomix.test'
     )`);
-    await db.query(`DELETE FROM organizations WHERE email = 'integration-test@sbomix.test'`);
+    await db.query(`DELETE FROM organizations WHERE email LIKE 'integration-test%@sbomix.test'`);
 });
 
 after(async () => {
@@ -34,7 +34,7 @@ after(async () => {
     try {
         if (dbAvailable) {
             await db.query(`DELETE FROM scan_jobs WHERE repo LIKE 'sbomix-test/%'`);
-            await db.query(`DELETE FROM organizations WHERE email = 'integration-test@sbomix.test'`);
+            await db.query(`DELETE FROM organizations WHERE email LIKE 'integration-test%@sbomix.test'`);
         }
     } finally {
         await db.pool.end().catch(() => {});
@@ -47,11 +47,14 @@ async function createTestOrg() {
     const key  = crypto.randomBytes(20).toString('hex');
     const hash = crypto.createHmac('sha256', hmacSecret).update(key).digest('hex');
 
+    // Unique email per call — organizations.email is UNIQUE, and multiple tests
+    // each create their own org, so a fixed address would collide.
+    const email = `integration-test-${crypto.randomBytes(6).toString('hex')}@sbomix.test`;
     const { rows: [org] } = await db.query(
         `INSERT INTO organizations (name, email, api_key)
-         VALUES ('Integration Test Org', 'integration-test@sbomix.test', $1)
+         VALUES ('Integration Test Org', $2, $1)
          RETURNING id`,
-        [hash]
+        [hash, email]
     );
     return { orgId: org.id, apiKey: key };
 }
