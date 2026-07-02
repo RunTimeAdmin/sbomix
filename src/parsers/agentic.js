@@ -32,7 +32,10 @@ const MCP_CONFIG_NAMES = new Set([
     'mcp_config.json', 'mcp-servers.json',
 ]);
 // Nested locations (relative path suffixes) also checked
-const MCP_NESTED = ['.cursor/mcp.json', '.vscode/mcp.json', '.continue/config.json'];
+const MCP_NESTED = [
+    '.cursor/mcp.json', '.vscode/mcp.json', '.continue/config.json',
+    '.claude/settings.json', '.claude/settings.local.json',
+];
 
 // System-prompt / agent-instruction files (behavior definition surface)
 const PROMPT_EXACT = new Set([

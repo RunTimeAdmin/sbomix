@@ -21,6 +21,8 @@
  *   --no-recursive          do not recurse into subdirectories
  *   --format <fmt>          both | cyclonedx | spdx  (default: both)
  *   --aibom-format <fmt>    json | yaml  (default: json)
+ *   --profile <name>        crypto-agent — adds an Agent Trust Report (MCP tool surface,
+ *                            signing-surface, known-bad match) as agent-trust-report.json/.html
  *   --license-check         flag forbidden/restricted licenses; exit 1 if any found
  *   --json                  machine-readable JSON summary to stdout
  *   --push                  push SBOM to SBOMix API (requires --api-key or $SBOMIX_API_KEY)
@@ -36,7 +38,10 @@ const { diffCycloneDX } = require('../src/diff');
 const { explainVulnerabilities } = require('../src/explain');
 const { fetchKEVSet }            = require('../src/kev');
 const { isGitHubTarget, parseGitHubTarget, cloneRepo } = require('../src/github');
+const { buildAgentTrustReport, renderAgentTrustReportHTML } = require('../src/agentTrustReport');
 const pkg = require('../package.json');
+
+const VALID_PROFILES = new Set(['crypto-agent']);
 
 const DEFAULT_API_URL = 'https://api.sbomix.com';
 
@@ -163,6 +168,7 @@ program
     .option('--no-docker',              'Skip Dockerfile audit')
     .option('--format <fmt>',           'Output format: both|cyclonedx|spdx',      'both')
     .option('--aibom-format <fmt>',     'AI-BOM format: json|yaml',                'json')
+    .option('--profile <name>',         'Report profile: crypto-agent (adds signing-surface + MCP tool-surface report)')
     .option('--license-check',          'Flag forbidden/restricted licenses; exit 1 if any found')
     .option('--explain',                'AI remediation advice (requires EXPLAIN_API_KEY; defaults to Claude Haiku)')
     .option('--json',                   'Print summary as JSON (machine-readable)')
@@ -180,6 +186,11 @@ program
         const warn = (s) => `\x1b[33m⚠\x1b[0m ${s}`;
         const err  = (s) => `\x1b[31m✖\x1b[0m ${s}`;
         const dim  = (s) => `  \x1b[2m${s}\x1b[0m`;
+
+        if (opts.profile && !VALID_PROFILES.has(opts.profile)) {
+            console.error(`\n  \x1b[31mError:\x1b[0m Unknown profile '${opts.profile}'. Valid profiles: ${[...VALID_PROFILES].join(', ')}\n`);
+            process.exit(2);
+        }
 
         try {
             // Local check comes FIRST — "tests/fixtures" must not be mistaken for owner/repo.
@@ -230,6 +241,18 @@ program
             const outDir = path.resolve(opts.out);
             const written = writeOutputs(result, outDir, { aibomFormat: opts.aibomFormat });
 
+            let agentTrustPaths = null;
+            if (opts.profile === 'crypto-agent') {
+                const report = buildAgentTrustReport(result, {
+                    name: repoName, version: repoVer, scanTarget: source, commitSha, scanDir,
+                });
+                const jsonPath = path.join(outDir, 'agent-trust-report.json');
+                const htmlPath = path.join(outDir, 'agent-trust-report.html');
+                fs.writeFileSync(jsonPath, JSON.stringify(report, null, 2));
+                fs.writeFileSync(htmlPath, renderAgentTrustReportHTML(report));
+                agentTrustPaths = { json: jsonPath, html: htmlPath, summary: report.execSummary };
+            }
+
             if (opts.json) {
                 console.log(JSON.stringify({
                     ...stats,
@@ -238,6 +261,7 @@ program
                         cyclonedx: written.cyclonedxPath,
                         spdx:      written.spdxPath,
                         aibom:     written.aibomPath,
+                        agentTrustReport: agentTrustPaths ? { json: agentTrustPaths.json, html: agentTrustPaths.html } : undefined,
                     },
                 }, null, 2));
             } else {
@@ -265,6 +289,16 @@ program
                 }
 
                 console.log(ok(`Quality score  ${stats.qualityScore}/100`));
+
+                // ── Agent Trust Report (crypto-agent profile) ─────────────────
+                if (agentTrustPaths) {
+                    const s = agentTrustPaths.summary;
+                    const critFlags = s.flags.filter((f) => f.severity === 'Critical').length;
+                    console.log('');
+                    const label = critFlags > 0 ? err : (s.flags.length > 0 ? warn : ok);
+                    console.log(label(`Agent Trust Report  ·  ${s.mcpServersDetected} MCP server(s)  ·  signing surface: ${s.signingSurfaceDetected ? 'yes' : 'no'}  ·  ${s.flags.length} flag(s)`));
+                    console.log(ok(`Agent Trust Report  →  ${agentTrustPaths.html}`));
+                }
 
                 // ── Dockerfile audit ──────────────────────────────────────────
                 if (result.dockerfileAudit.length > 0) {

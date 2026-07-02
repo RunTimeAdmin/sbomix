@@ -343,6 +343,20 @@ Base image components appear in the CycloneDX output as `type: container` with `
 ### Quality Score
 Every SBOM gets a completeness score (0–100) measuring alignment with CISA 2025 minimum elements: purl coverage, hash coverage, license coverage, and lock-file fidelity.
 
+### Agent Trust Report (`--profile crypto-agent`)
+```bash
+npx sbomix . --profile crypto-agent
+```
+Adds two artifacts alongside the normal scan output: `agent-trust-report.json` and a standalone, print-to-PDF `agent-trust-report.html`. Built for teams answering "what's in the agent that holds our keys" — an exchange questionnaire, an investor diligence request, or an internal review before granting an agent signing authority.
+
+The report covers:
+- **MCP tool surface** — every detected MCP server, its transport, auth, version-pinning, and authority scope (shell access, filesystem breadth), reusing the same detection and Least Agency Score behind the AI-BOM's agentic threats (AI-009 through AI-012).
+- **Signing surface** — dependencies that hold or use private keys (EVM, Solana, Bitcoin, Cosmos, Polkadot, hardware wallets, cloud KMS clients), plus `.env` variable *names* that look like key material. Values are never read — the scanner only ever regex-matches variable names.
+- **Known-bad / typosquat check** — exact-match against a versioned list (ships empty; this is a curation task, not something SBOMix invents) plus a naming-proximity check against well-known signing library names.
+- **Compliance mapping** — EU AI Act Art. 11/Annex IV and OWASP Agentic AI Top 10 (ASI04) references, framed as documentation alignment, not certification.
+
+Every report carries a canonical SHA-256 (`integrity.manifestSha256`) computed after stripping volatile fields (timestamps, report ID, CycloneDX serial number), so the same commit produces the same hash across runs — a tamper-evidence baseline, not a signature. This is presence detection and static inventory, not a code audit, a security rating, or a legal opinion.
+
 ---
 
 ## GitHub Action
@@ -464,6 +478,7 @@ Scan options:
   -a, --author <org>    Author or organisation name
   --token <token>       GitHub token for private repos (or set $GITHUB_TOKEN)
   --format <fmt>        both | cyclonedx | spdx  (default: both)
+  --profile <name>      crypto-agent — adds an Agent Trust Report (MCP + signing surface)
   --license-check       Flag forbidden/restricted licenses; exit 1 if any found
   --explain             AI remediation advice via Claude by default (requires EXPLAIN_API_KEY)
   --no-vulns            Skip OSV vulnerability enrichment
