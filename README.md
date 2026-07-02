@@ -357,6 +357,8 @@ The report covers:
 
 Every report carries a canonical SHA-256 (`integrity.manifestSha256`) computed after stripping volatile fields (timestamps, report ID, CycloneDX serial number), so the same commit produces the same hash across runs — a tamper-evidence baseline, not a signature. This is presence detection and static inventory, not a code audit, a security rating, or a legal opinion.
 
+**Also available without the CLI**, once an app has an SBOM on [sbomix.com](https://sbomix.com): the dashboard's app detail screen has an "Agent Trust Report ▾" button (JSON or HTML), and the same data is a REST call away at `GET /api/v1/apps/:name/agent-trust-report?format=json|html`. The hosted report is built from the app's already-stored SBOM, so it has one gap the CLI doesn't: no filesystem access means `.env` scanning is skipped, and the report says so explicitly (`envScanPerformed: false`) rather than reporting a clean scan it never ran. Run the CLI locally for full signing-surface coverage. In CI, set `profile: crypto-agent` on the Action (see below) to generate the report and get MCP/signing-surface counts in the PR comment.
+
 ---
 
 ## GitHub Action
@@ -406,6 +408,7 @@ On every pull request, SBOMix will:
 | `api-key` | `""` | SBOMix API key (`secrets.SBOMIX_API_KEY`) |
 | `directory` | `.` | Directory to scan |
 | `aibom-format` | `json` | AI-BOM output format: `json` or `yaml` |
+| `profile` | `""` | `crypto-agent` — adds an Agent Trust Report (MCP tool surface, signing surface, known-bad match); PR comment shows a flag summary |
 
 ### Action Outputs
 
@@ -417,6 +420,8 @@ On every pull request, SBOMix will:
 | `vulnerability-count` | Total known vulnerabilities |
 | `critical-count` | Critical severity vulnerabilities (CVSS ≥ 9.0) |
 | `quality-score` | SBOM completeness score 0–100 |
+| `agent-trust-report-json-path` | Path to the Agent Trust Report JSON manifest (only with `profile: crypto-agent`) |
+| `agent-trust-report-html-path` | Path to the Agent Trust Report HTML (only with `profile: crypto-agent`) |
 | `aibom-path` | Path to generated AI-BOM (only present when AI/ML components are detected) |
 | `ai-model-count` | Number of AI/ML model components detected |
 | `ai-threat-count` | Number of AI/ML threats detected |
@@ -615,6 +620,7 @@ API available at `http://localhost:3080`.
 | `POST` | `/api/v1/vex` | Add a VEX statement |
 | `GET` | `/api/v1/vex` | List VEX statements |
 | `POST` | `/api/v1/keys` | Issue a scoped API key |
+| `GET` | `/api/v1/apps/:name/agent-trust-report?format=json\|html` | Agent Trust Report for the app's latest SBOM — built server-side from stored data (no filesystem access, so `.env` scanning is skipped and marked as such, not silently reported clean) |
 
 See [`src/api/schema.sql`](src/api/schema.sql) for the full database schema.
 
