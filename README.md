@@ -1,13 +1,13 @@
 <div align="center">
-  <img src="https://sbomix.com/assets/sbomix-og.png" alt="SBOMix" width="800" />
+  <img src="https://sbomix.com/sbomix-og.jpg" alt="SBOMix" width="800" />
 
   <h1>SBOMix</h1>
 
   <p><strong>Generate CycloneDX, SPDX, and AI-BOM from any project in one command.</strong></p>
 
   [![npm](https://img.shields.io/npm/v/sbomix?color=00c851&logo=npm&logoColor=white)](https://www.npmjs.com/package/sbomix)
-  [![CI](https://github.com/RunTimeAdmin/sbomix-private/actions/workflows/ci.yml/badge.svg)](https://github.com/RunTimeAdmin/sbomix-private/actions/workflows/ci.yml)
-  [![SBOM](https://github.com/RunTimeAdmin/sbomix-private/actions/workflows/sbom.yml/badge.svg)](https://github.com/RunTimeAdmin/sbomix-private/actions/workflows/sbom.yml)
+  [![CI](https://github.com/RunTimeAdmin/sbomix/actions/workflows/ci.yml/badge.svg)](https://github.com/RunTimeAdmin/sbomix/actions/workflows/ci.yml)
+  [![SBOM](https://github.com/RunTimeAdmin/sbomix/actions/workflows/sbom.yml/badge.svg)](https://github.com/RunTimeAdmin/sbomix/actions/workflows/sbom.yml)
   [![License: MIT](https://img.shields.io/badge/license-MIT-00c851)](LICENSE)
   [![CycloneDX 1.6](https://img.shields.io/badge/CycloneDX-1.6-blueviolet)](https://cyclonedx.org)
   [![SPDX 2.3](https://img.shields.io/badge/SPDX-2.3-blue)](https://spdx.dev)
@@ -608,7 +608,7 @@ See [`src/api/schema.sql`](src/api/schema.sql) for the full database schema.
 ## Development
 
 ```bash
-git clone https://github.com/RunTimeAdmin/sbomix-private
+git clone https://github.com/RunTimeAdmin/sbomix
 cd sbomix
 npm install
 
