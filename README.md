@@ -25,6 +25,10 @@ Produces **CycloneDX 1.6**, **SPDX 2.3**, and **AI-BOM** in under 500ms. No Dock
 
 **Install nothing** — `npx` always runs the latest. Prefer a persistent CLI? `npm install -g sbomix` (needs Node 18+).
 
+<div align="center">
+  <img src="https://raw.githubusercontent.com/RunTimeAdmin/sbomix/main/assets/sbomix-demo.gif" alt="sbomix: from npm install to CycloneDX, SPDX, and AI-BOM in seconds" width="900" />
+</div>
+
 > **☁️ Prefer it hosted?** Skip the Postgres setup. [**sbomix.com**](https://sbomix.com) is the managed platform: a web dashboard, CVE blast-radius search across every repo, AI-BOM, and SBOM history. Free plan, paid from $19/mo with a 14-day trial. [**Get started free →**](https://api.sbomix.com/register)
 
 ---
