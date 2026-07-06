@@ -66,9 +66,16 @@ async function generateFromDirectory(dir, opts = {}) {
     const allComponents = [];
     const ecosystemsFound = new Set();
     for (const lf of lockFiles) {
-        const comps = parseLockFile(lf);
-        allComponents.push(...comps);
-        ecosystemsFound.add(lf.ecosystem);
+        // One malformed lock file (a broken test fixture, a vendored sample, an
+        // unsupported variant) must never abort the whole scan — skip it with a
+        // warning and keep going. Real repos are full of such files.
+        try {
+            const comps = parseLockFile(lf);
+            allComponents.push(...comps);
+            ecosystemsFound.add(lf.ecosystem);
+        } catch (err) {
+            console.warn(`[sbomix] Skipped ${lf.path} (${lf.type}): ${err.message}`);
+        }
     }
 
     // 2b. AI BOM — LOCAL detection only (filesystem, no network). Fast hot path.

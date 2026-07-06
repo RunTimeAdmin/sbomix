@@ -14,6 +14,7 @@
  */
 
 const fs = require('fs');
+const yaml = require('yaml');
 const { createComponent, makePurl } = require('../component');
 
 // ── package-lock.json ─────────────────────────────────────────────────────────
@@ -118,12 +119,41 @@ function walkV1(deps, out) {
 
 function parseYarnLock(filePath) {
     const raw = fs.readFileSync(filePath, 'utf8');
+    // Yarn Berry (v2+) lockfiles are YAML and carry a __metadata block.
     if (raw.includes('__metadata:')) {
-        // yarn v2/berry — not yet supported
-        console.warn('[sbomix] yarn.lock v2 (berry) detected — skipping (use package-lock.json or pnpm-lock.yaml)');
-        return [];
+        return parseYarnBerry(raw);
     }
     return parseYarnV1(raw);
+}
+
+// ── yarn.lock v2+ (Berry) ─────────────────────────────────────────────────────
+// Berry lockfiles are YAML: each top-level key is one or more descriptors
+// ("pkg@npm:^1.0.0, pkg@npm:^1.2.0") mapping to a resolved entry with `version`
+// and `resolution` (e.g. "@scope/pkg@npm:1.2.3"). We derive name+version from
+// the resolution and skip the project's own workspace packages.
+function parseYarnBerry(raw) {
+    const data = yaml.parse(raw) || {};
+    const components = [];
+    const seen = new Set();
+
+    for (const [descriptor, entry] of Object.entries(data)) {
+        if (descriptor === '__metadata' || !entry || typeof entry !== 'object') continue;
+        const resolution = String(entry.resolution || descriptor);
+        if (resolution.includes('@workspace:')) continue; // local package, not a dependency
+
+        // "name@<protocol>:..." → name (handles scoped names like @angular/compiler)
+        const m = resolution.match(/^(.+?)@[a-z]+:/);
+        const name = m ? m[1] : null;
+        const version = entry.version;
+        if (!name || version === undefined || version === null) continue;
+
+        const key = `${name}@${version}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        components.push(createComponent({ name, version: String(version), ecosystem: 'npm' }));
+    }
+    return components;
 }
 
 function parseYarnV1(raw) {

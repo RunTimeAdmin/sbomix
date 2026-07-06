@@ -10,12 +10,36 @@ const { createComponent, parseIntegritySRI } = require('../component');
  */
 function parsePnpmLock(filePath) {
     const raw  = fs.readFileSync(filePath, 'utf8');
-    const data = yaml.parse(raw);
+    const data = loadPnpmYaml(raw);
     const ver  = String(data.lockfileVersion || '6');
     const major = parseInt(ver.split('.')[0], 10);
 
     if (major >= 9) return parsePnpmV9(data);
     return parsePnpmV6(data);
+}
+
+// A pnpm-lock.yaml is usually one YAML document, but some real locks (e.g.
+// pnpm's own repo) concatenate multiple lockfileVersion documents. yaml.parse()
+// throws on those ("Source contains multiple documents"), so parse them all and
+// merge the maps — losing no packages, and never aborting the scan.
+function loadPnpmYaml(raw) {
+    const docs = yaml.parseAllDocuments(raw)
+        .map((d) => d.toJS())
+        .filter((d) => d && typeof d === 'object');
+    if (docs.length === 0) return {};
+    if (docs.length === 1) return docs[0];
+
+    const merged = {};
+    for (const doc of docs) {
+        for (const [k, v] of Object.entries(doc)) {
+            if (v && typeof v === 'object' && !Array.isArray(v) && merged[k] && typeof merged[k] === 'object') {
+                Object.assign(merged[k], v); // merge maps like packages / snapshots / importers
+            } else if (merged[k] === undefined) {
+                merged[k] = v;
+            }
+        }
+    }
+    return merged;
 }
 
 // ── v9 format (pnpm 9+) ────────────────────────────────────────────────────

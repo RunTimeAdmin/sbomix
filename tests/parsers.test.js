@@ -3,7 +3,7 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
-const { parsePackageLock } = require('../src/parsers/npm');
+const { parsePackageLock, parseYarnLock } = require('../src/parsers/npm');
 const { parseCargoLock }   = require('../src/parsers/cargo');
 const { parsePnpmLock }    = require('../src/parsers/pnpm');
 const { parsePomXml }        = require('../src/parsers/maven');
@@ -488,5 +488,35 @@ describe('Dart pubspec.lock parser', () => {
         assert.ok(http.hashes.length > 0, 'no hash on http');
         assert.equal(http.hashes[0].alg, 'SHA-256');
         assert.ok(http.hashes[0].content.length > 0, 'empty hash content');
+    });
+});
+
+describe('yarn Berry (v2+) parser', () => {
+    test('parses the YAML-based Berry lockfile (was previously skipped -> 0 components)', () => {
+        const comps = parseYarnLock(path.join(FIXTURES, 'yarn-berry.lock'));
+        const names = comps.map((c) => c.name);
+        assert.ok(names.includes('lodash'), 'lodash not parsed from Berry lock');
+        assert.ok(names.includes('@babel/core'), 'scoped @babel/core not parsed from Berry lock');
+    });
+
+    test('resolves version + purl from the resolution field', () => {
+        const comps = parseYarnLock(path.join(FIXTURES, 'yarn-berry.lock'));
+        const lodash = comps.find((c) => c.name === 'lodash');
+        assert.equal(lodash.version, '4.17.21');
+        assert.match(lodash.purl, /^pkg:npm\/lodash@4\.17\.21$/);
+    });
+
+    test('skips the project\'s own @workspace: package', () => {
+        const comps = parseYarnLock(path.join(FIXTURES, 'yarn-berry.lock'));
+        assert.ok(!comps.some((c) => c.name === 'sbomix-fixture'), 'workspace package should not be a dependency');
+    });
+});
+
+describe('pnpm multi-document lockfile', () => {
+    test('merges packages across concatenated YAML documents (was previously a crash)', () => {
+        const comps = parsePnpmLock(path.join(FIXTURES, 'pnpm-multidoc.yaml'));
+        const names = comps.map((c) => c.name);
+        assert.ok(names.includes('lodash'), 'lodash (doc 1) missing');
+        assert.ok(names.includes('is-odd'), 'is-odd (doc 2) missing — documents not merged');
     });
 });
