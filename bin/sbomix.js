@@ -40,6 +40,7 @@ const { fetchKEVSet }            = require('../src/kev');
 const { isGitHubTarget, parseGitHubTarget, cloneRepo } = require('../src/github');
 const { buildAgentTrustReport, renderAgentTrustReportHTML } = require('../src/agentTrustReport');
 const { assessCRA, formatCRAReport } = require('../src/cra');
+const { formatAiBomReport } = require('../src/aibomReport');
 const pkg = require('../package.json');
 
 const VALID_PROFILES = new Set(['crypto-agent']);
@@ -171,6 +172,7 @@ program
     .option('--aibom-format <fmt>',     'AI-BOM format: json|yaml',                'json')
     .option('--profile <name>',         'Report profile: crypto-agent (adds signing-surface + MCP tool-surface report)')
     .option('--cra',                    'CRA readiness — plain-language evidence & gap report (EU Cyber Resilience Act)')
+    .option('--ai-bom',                 'AI-BOM report — models, providers, datasets, MCP servers & agent tooling as supply-chain components')
     .option('--license-check',          'Flag forbidden/restricted licenses; exit 1 if any found')
     .option('--explain',                'AI remediation advice (requires EXPLAIN_API_KEY; defaults to Claude Haiku)')
     .option('--json',                   'Print summary as JSON (machine-readable)')
@@ -305,6 +307,12 @@ async function runScan(source, opts) {
                 if (craAssessment) {
                     console.log(formatCRAReport(craAssessment, repoName));
                     console.log(ok(`CRA report     →  ${path.join(outDir, 'cra-report.json')}`));
+                }
+
+                // ── AI-BOM report ─────────────────────────────────────────────
+                if (opts.aiBom) {
+                    console.log(formatAiBomReport(result, repoName));
+                    if (written.aibomPath) console.log(ok(`AI-BOM         →  ${written.aibomPath}`));
                 }
 
                 // ── Agent Trust Report (crypto-agent profile) ─────────────────
@@ -481,6 +489,17 @@ program.addCommand(
         .option('--token <token>', 'GitHub token for private repos (or set $GITHUB_TOKEN)')
         .option('--no-vulns',      'Skip OSV vulnerability enrichment')
         .action((source, opts) => runScan(source, { ...opts, cra: true }))
+);
+
+// ── ai-bom subcommand (alias for `<source> --ai-bom`) ─────────────────────────
+program.addCommand(
+    new Command('ai-bom')
+        .description('AI-BOM — models, providers, datasets, MCP servers & agent tooling as supply-chain components')
+        .argument('<source>', 'Local path  OR  owner/repo[@ref]  OR  GitHub URL')
+        .option('-o, --out <dir>', 'Output directory', '.')
+        .option('--token <token>', 'GitHub token for private repos (or set $GITHUB_TOKEN)')
+        .option('--no-vulns',      'Skip OSV vulnerability enrichment')
+        .action((source, opts) => runScan(source, { ...opts, aiBom: true }))
 );
 
 program.parse();

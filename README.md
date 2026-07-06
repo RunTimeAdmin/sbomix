@@ -294,6 +294,29 @@ The `summary.disclaimer` field in the output states explicitly: "Evidence-to-con
 
 Add `--aibom-format yaml` to write `aibom.yaml` instead of JSON. When no AI/ML components are detected, no AI-BOM file is written and the `aibom-path` action output is omitted.
 
+**Readable report** — for a plain-language view of the same data, run:
+
+```bash
+sbomix ai-bom .          # or: sbomix . --ai-bom
+```
+
+This prints your AI supply chain as first-class components — models & external API providers, frameworks & runtimes, datasets, and (the part no other SBOM tool surfaces) the **MCP servers and system-prompt files an agent can reach**, each with its authority scope:
+
+```
+  MCP SERVERS / AGENT TOOLS (3)  —  what your agent can call
+    • filesystem  ·  stdio  ·  no auth  ·  ⚠ broad-filesystem
+        from .cursor/mcp.json
+    • shell       ·  stdio  ·  no auth  ·  ⚠ shell-exec, unpinned-source
+        from .cursor/mcp.json
+    • github      ·  stdio  ·  auth required
+        from .cursor/mcp.json
+
+  Least Agency Score: 35/100  (higher = tighter agent authority)
+  AI supply-chain threats: 4  (0 critical, 2 high)
+```
+
+It is presence detection and static inventory, not a code audit or a security rating. `--ai-bom` also works as an input on the GitHub Action.
+
 ### CISA KEV Enrichment
 Every vulnerability is automatically cross-referenced against the [CISA Known Exploited Vulnerabilities catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) (1,600+ entries, refreshed daily). Vulns on the KEV list are flagged `kev: true` in the database and surfaced in the AI explain output as highest priority. Being actively exploited in the wild is categorically different from a theoretical CVSS score.
 
