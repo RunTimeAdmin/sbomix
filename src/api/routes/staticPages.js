@@ -43,6 +43,7 @@ router.get('/docs', (_req, res) => {
     res.sendFile(path.join(PAGES, 'docs.html'));
 });
 router.get('/pricing',   (_req, res) => res.sendFile(path.join(PAGES, 'pricing.html')));
+router.get('/why',       (_req, res) => res.sendFile(path.join(PAGES, 'why.html')));
 router.get('/health', async (_req, res) => {
     try {
         await db.query('SELECT 1');
