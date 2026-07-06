@@ -71,7 +71,7 @@ function assessCRA(result, opts = {}) {
         'Annex I, Part II, points (5) & (6) — coordinated disclosure & reporting contact',
         'put in place and enforce a policy on coordinated vulnerability disclosure',
         true,
-        `Point (6) additionally requires a contact address for reporting vulnerabilities. Both are evidenced by a SECURITY.md / security.txt — ${policyPresent ? 'present in this project.' : 'NOT found; add one.'}`);
+        `Point (6): "take measures to facilitate the sharing of information about potential vulnerabilities … including by providing a contact address for the reporting of the vulnerabilities discovered in the product with digital elements". Both are evidenced by a SECURITY.md / security.txt — ${policyPresent ? 'present in this project.' : 'NOT found; add one.'}`);
 
     // Component licensing → technical documentation.
     add((undocumented === 0 && forbidden === 0) ? 'evidence' : 'review',
@@ -119,12 +119,12 @@ function assessCRA(result, opts = {}) {
         'An update-delivery mechanism a scan cannot verify.');
 
     add('process', 'Annex I, Part II, point (8)',
-        'requires available security updates to be disseminated without delay and (unless otherwise agreed for tailor-made products) free of charge, with advisory messages',
-        false,
+        'ensure that, where security updates are available to address identified security issues, they are disseminated without delay and, unless otherwise agreed between a manufacturer and a business user in relation to a tailor-made product with digital elements, free of charge, accompanied by advisory messages providing users with the relevant information, including on potential action to be taken',
+        true,
         'Update dissemination timeliness, cost and advisories — not observable from a scan.');
 
     add('process', 'Article 14 — reporting obligations (from 11 Sept 2026)',
-        'requires manufacturers to notify actively exploited vulnerabilities and severe incidents to the relevant CSIRT and to ENISA',
+        'requires manufacturers to notify actively exploited vulnerabilities and severe incidents to the CSIRT designated as coordinator and to ENISA',
         false,
         'An operational reporting duty. Purely process — a scan cannot evidence it.');
 
@@ -134,15 +134,15 @@ function assessCRA(result, opts = {}) {
         false,
         'A legal declaration. No scan produces or verifies it.');
 
-    add('legal', 'Article 30 & Annex VIII — CE marking',
-        'requires the CE marking to be affixed following the applicable conformity assessment',
+    add('legal', 'Article 30 (CE marking); Article 32 & Annex VIII (conformity assessment)',
+        'the CE marking is affixed following the conformity assessment required by Article 32 (procedures — modules A/B/C/H — in Annex VIII)',
         false,
         'A legal act following conformity assessment. A scanner has nothing to say about CE eligibility.');
 
-    add('legal', 'Annex VII — technical documentation',
-        'requires a technical file (retained 10 years); its required contents include the SBOM and the vulnerability-disclosure policy (point 2(b))',
-        false,
-        'A scan cannot assemble the file — but your generated SBOM and disclosure policy are two of its required contents.');
+    add('legal', 'Annex VII, point 2(b) — technical documentation',
+        'the software bill of materials, the coordinated vulnerability disclosure policy, evidence of the provision of a contact address … and a description of the technical solutions chosen for the secure distribution of updates',
+        true,
+        'The 10-year technical file. A scan cannot assemble it — but your generated SBOM and disclosure policy are two of its required contents (quoted above).');
 
     add('legal', 'Annex III / Annex IV — product classification',
         'classifies certain products as important (Class I / II) or critical, which decides whether self-assessment is even allowed',
