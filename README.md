@@ -18,7 +18,7 @@
 npx sbomix .
 
 # …or any public GitHub repo without cloning it first (needs git installed):
-npx sbomix expressjs/express
+npx sbomix facebook/react
 ```
 
 Produces **CycloneDX 1.6**, **SPDX 2.3**, and **AI-BOM** in under 500ms. No Docker. No agents. No config files.
