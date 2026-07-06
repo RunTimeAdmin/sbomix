@@ -18,8 +18,10 @@
 npx sbomix .
 
 # …or any public GitHub repo without cloning it first (needs git installed):
-npx sbomix facebook/react
+npx sbomix npm/cli
 ```
+
+> **Lockfile-first, by design.** Point sbomix at a library that ships no lockfile (e.g. `npx sbomix expressjs/express`) and it says `No supported lock files found` rather than guess at an incomplete dependency tree. Accurate SBOMs come from lockfiles — that's the whole thesis, not a bug.
 
 Produces **CycloneDX 1.6**, **SPDX 2.3**, and **AI-BOM** in under 500ms. No Docker. No agents. No config files.
 
