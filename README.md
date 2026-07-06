@@ -14,10 +14,16 @@
 </div>
 
 ```bash
-npx sbomix RunTimeAdmin/myapp@v2.1.0
+# Scan the project you're in — needs only Node, works anywhere:
+npx sbomix .
+
+# …or any public GitHub repo without cloning it first (needs git installed):
+npx sbomix expressjs/express
 ```
 
 Produces **CycloneDX 1.6**, **SPDX 2.3**, and **AI-BOM** in under 500ms. No Docker. No agents. No config files.
+
+**Install nothing** — `npx` always runs the latest. Prefer a persistent CLI? `npm install -g sbomix` (needs Node 18+).
 
 > **☁️ Prefer it hosted?** Skip the Postgres setup. [**sbomix.com**](https://sbomix.com) is the managed platform: a web dashboard, CVE blast-radius search across every repo, AI-BOM, and SBOM history. Free plan, paid from $19/mo with a 14-day trial. [**Get started free →**](https://api.sbomix.com/register)
 
