@@ -1,6 +1,6 @@
 {
   "name": "sbomix",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Fast, accurate SBOM generation from GitHub repos and local lock files",
   "homepage": "https://sbomix.com",
   "repository": {

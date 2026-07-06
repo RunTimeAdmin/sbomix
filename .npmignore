@@ -1,6 +1,10 @@
-# Test output / stray SBOM files
+# Test output / stray scan artifacts (never ship generated reports)
 *.txt
 bom.*.json
+aibom.json
+cra-report.json
+agent-trust-report.json
+agent-trust-report.html
 
 # Development / CI — not needed by npm consumers
 .env
