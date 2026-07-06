@@ -17,6 +17,9 @@ src/api/
 # Assets (images, not needed at runtime)
 assets/
 
+# Internal agent instructions — not for end users
+CLAUDE.md
+
 # Stray analysis/review docs
 perf_check.js
 perf_check.json

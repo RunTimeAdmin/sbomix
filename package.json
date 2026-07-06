@@ -1,14 +1,14 @@
 {
   "name": "sbomix",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Fast, accurate SBOM generation from GitHub repos and local lock files",
   "homepage": "https://sbomix.com",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/RunTimeAdmin/sbomix-private.git"
+    "url": "git+https://github.com/RunTimeAdmin/sbomix.git"
   },
   "bugs": {
-    "url": "https://github.com/RunTimeAdmin/sbomix-private/issues"
+    "url": "https://github.com/RunTimeAdmin/sbomix/issues"
   },
   "main": "src/pipeline.js",
   "bin": {
