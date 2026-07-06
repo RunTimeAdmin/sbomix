@@ -58,7 +58,9 @@ async function generateFromDirectory(dir, opts = {}) {
     // 1. Detect lock files
     const lockFiles = detect(dir, { recursive: opts.recursive !== false });
     if (lockFiles.length === 0) {
-        throw new Error(`No supported lock files found in ${dir}.\n`
+        // Name what the user actually pointed at (e.g. "expressjs/express"),
+        // not the internal temp clone directory.
+        throw new Error(`No supported lock files found in ${opts.sourceLabel || dir}.\n`
             + 'Expected one of: package-lock.json, yarn.lock, pnpm-lock.yaml, poetry.lock, Pipfile.lock, requirements.txt, Cargo.lock, go.mod, pom.xml, gradle.lockfile, packages.lock.json, Gemfile.lock, composer.lock, Package.resolved, pubspec.lock');
     }
 

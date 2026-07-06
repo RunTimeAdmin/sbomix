@@ -15,6 +15,21 @@ const GIT_MISSING_MSG =
     'git is required to scan a remote GitHub repo, but it was not found on your PATH.\n' +
     '  → Install git (https://git-scm.com/downloads), or scan a local directory instead:  sbomix .';
 
+// git streams progress ("Updating files: 42%") to stderr; on failure that
+// buries the real cause. Keep only the lines that explain the failure, and add
+// an actionable hint for the common Windows long-path checkout error.
+function gitErrorDetail(stderr) {
+    const lines = String(stderr).split(/\r?\n/).map((l) => l.trim());
+    let meaningful = lines.filter((l) => /^(fatal|error|warning|remote):/i.test(l));
+    if (meaningful.length === 0) meaningful = lines.filter(Boolean).slice(-3);
+    let msg = meaningful.join('\n');
+    if (/Filename too long|unable to checkout working tree/i.test(stderr)) {
+        msg += '\n  hint: this repo has file paths longer than Windows allows. Enable long paths:'
+            +  '\n        git config --global core.longpaths true';
+    }
+    return msg;
+}
+
 /**
  * Parse a GitHub target string into { owner, repo, ref }
  *
@@ -106,7 +121,7 @@ function cloneRepo(target, opts = {}) {
         if (stderr.includes('Remote branch') && stderr.includes('not found')) {
             throw new Error(`Ref '${ref}' not found in ${owner}/${repo}`);
         }
-        throw new Error(`git clone failed: ${stderr}`);
+        throw new Error(`git clone of ${owner}/${repo} failed:\n${gitErrorDetail(stderr)}`);
     }
 
     // Resolve the exact commit SHA so we embed it in the SBOM

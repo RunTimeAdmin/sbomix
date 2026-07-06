@@ -227,14 +227,15 @@ program
             }
 
             const result = await generateFromDirectory(scanDir, {
-                name:      repoName,
-                version:   repoVer,
-                author:    opts.author,
-                vulns:     opts.vulns,
-                licenses:  opts.licenses,
-                recursive: opts.recursive,
-                docker:    opts.docker,
-                format:    opts.format,
+                name:        repoName,
+                version:     repoVer,
+                author:      opts.author,
+                vulns:       opts.vulns,
+                licenses:    opts.licenses,
+                recursive:   opts.recursive,
+                docker:      opts.docker,
+                format:      opts.format,
+                sourceLabel: source,   // what the user typed — used in the "no lock files" message
             });
 
             const { stats } = result;
