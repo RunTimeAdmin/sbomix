@@ -92,6 +92,27 @@ test('framework components carry the detected version', () => {
     assert.strictEqual(torch.purl, 'pkg:generic/pytorch@2.4.1');
 });
 
+// api-sdk components must not collide with the plain library purl for the
+// same package — deduplicateComponents() in generators/cyclonedx.js keeps
+// first-occurrence-by-purl, and the plain library entry is always added
+// first (pipeline.js), so a shared purl silently dropped the AI component
+// from every CycloneDX output. Regression for that bug.
+test('api-provider component purl does not collide with its own library entry', () => {
+    const res = finalizeAIResult(detectAILocal(root, [{ name: 'anthropic', version: '0.40' }]));
+    const apiComp = res.components.find(c => c.aiMetadata.role === 'api-provider');
+    assert.strictEqual(apiComp.name, 'Anthropic API');
+    assert.notStrictEqual(apiComp.purl, 'pkg:pypi/anthropic@0.40');
+
+    const plainLib = { type: 'library', name: 'anthropic', version: '0.40', ecosystem: 'pypi',
+        purl: 'pkg:pypi/anthropic@0.40', licenses: [], hashes: [], dependsOn: [], vulnerabilities: [] };
+    const cdx = generateCycloneDX([plainLib, apiComp], { name: 'app', version: '1.0' });
+
+    assert.strictEqual(cdx.components.length, 2, 'both the library and the API-provider component must survive');
+    const survivedApi = cdx.components.find(c => c.name === 'Anthropic API');
+    assert.ok(survivedApi, 'Anthropic API component must not be deduped away');
+    assert.ok(survivedApi.properties.some(p => p.name === 'sbomix:ai:provider' && p.value === 'Anthropic'));
+});
+
 // ── Pillar 4: agentic detection ───────────────────────────────────────────────
 
 test('parseMCPConfig flags shell, broad-fs, unpinned, and remote authority', () => {

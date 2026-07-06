@@ -387,10 +387,20 @@ function makeAPIComponent(pkg) {
         groq: 'Groq', aws: 'AWS Bedrock',
     };
     const label = labels[pkg.provider] || pkg.label;
+    const ver   = pkg.version || 'unknown';
+    // pkg:generic, not pkg:pypi — the SDK package (e.g. `anthropic`) already
+    // exists as a normal library component with that exact pypi purl, and
+    // deduplicateComponents() in generators/cyclonedx.js keeps first-occurrence-
+    // by-purl. Since the plain library component is pushed to allComponents
+    // before this one (pipeline.js), reusing its purl silently dropped this
+    // component from every CycloneDX output. Mirrors makeFrameworkComponent's
+    // scheme, which has no such collision (confirmed: PyTorch/LangChain/etc.
+    // all survive).
+    const slug = pkg.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     return {
-        type: 'machine-learning-model', name: `${label} API`, version: pkg.version || 'unknown',
+        type: 'machine-learning-model', name: `${label} API`, version: ver,
         ecosystem: 'ai',
-        purl: `pkg:pypi/${encodeURIComponent(pkg.name)}@${pkg.version || 'unknown'}`,
+        purl: `pkg:generic/${slug}-api@${ver}`,
         scope: 'required', licenses: [], hashes: [], dependsOn: [], vulnerabilities: [],
         aiMetadata: { role: 'api-provider', provider: label, sdkPackage: pkg.name, sdkVersion: pkg.version },
         modelCard: { modelParameters: { modelType: 'api-hosted' } },
