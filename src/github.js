@@ -8,6 +8,13 @@ const os = require('os');
 
 const execFileAsync = promisify(execFile);
 
+// Shown when the `git` binary isn't on PATH. Remote-repo scanning shells out
+// to `git clone`; without git, spawn fails with ENOENT and (previously) an
+// empty "git clone failed:" message. Local-directory scans need no git.
+const GIT_MISSING_MSG =
+    'git is required to scan a remote GitHub repo, but it was not found on your PATH.\n' +
+    '  → Install git (https://git-scm.com/downloads), or scan a local directory instead:  sbomix .';
+
 /**
  * Parse a GitHub target string into { owner, repo, ref }
  *
@@ -81,6 +88,14 @@ function cloneRepo(target, opts = {}) {
         env: spawnEnv,
     });
 
+    // git binary missing → spawn fails with ENOENT and status null. Catch it
+    // before the generic handler, which would otherwise throw an empty message.
+    if (result.error) {
+        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+        if (result.error.code === 'ENOENT') throw new Error(GIT_MISSING_MSG);
+        throw new Error(`git clone failed: ${result.error.message}`);
+    }
+
     if (result.status !== 0) {
         try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
         const stderr = (result.stderr || result.stdout || '').trim();
@@ -140,6 +155,7 @@ async function cloneRepoAsync(target, opts = {}) {
         if (err.code === 'ERR_ABORT' || err.name === 'AbortError') {
             throw new Error('Scan timed out — repository may be too large. Use the CLI for large repos.');
         }
+        if (err.code === 'ENOENT') throw new Error(GIT_MISSING_MSG);
         const msg = (err.stderr || err.stdout || err.message || '').trim();
         if (msg.includes('not found') || msg.includes('Repository not found')) {
             throw new Error(`Repository not found: ${owner}/${repo}`);
