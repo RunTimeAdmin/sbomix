@@ -372,6 +372,18 @@ Every report carries a canonical SHA-256 (`integrity.manifestSha256`) computed a
 
 **Also available without the CLI**, once an app has an SBOM on [sbomix.com](https://sbomix.com): the dashboard's app detail screen has an "Agent Trust Report ▾" button (JSON or HTML), and the same data is a REST call away at `GET /api/v1/apps/:name/agent-trust-report?format=json|html`. The hosted report is built from the app's already-stored SBOM, so it has one gap the CLI doesn't: no filesystem access means `.env` scanning is skipped, and the report says so explicitly (`envScanPerformed: false`) rather than reporting a clean scan it never ran. Run the CLI locally for full signing-surface coverage. In CI, set `profile: crypto-agent` on the Action (see below) to generate the report and get MCP/signing-surface counts in the PR comment.
 
+### CRA readiness (`sbomix cra-check` / `--cra`)
+```bash
+npx sbomix cra-check .        # or:  npx sbomix . --cra
+```
+A plain-language readiness report for the **EU Cyber Resilience Act** (Regulation (EU) 2024/2847), split three honest ways:
+
+- **✓ Scan evidence** — what a scan actually proves, ready for an auditor: your SBOM (Annex I, Part II(1) — the one requirement the CRA spells out by name), the component/vulnerability inventory, and, if you ship a `SECURITY.md`/`security.txt`, your coordinated-disclosure policy (points (5) & (6)).
+- **▲ Review / gaps** — evidence relevant to a clause but *not* conformity: known vulnerabilities against Part I, point (2)(a) — **never a green pass** ("known" is not "exploitable"; CISA KEV enrichment via the hosted scan / `--explain` upgrades it to "known exploited"); attack-surface signals against (2)(j); a missing disclosure policy; undocumented licenses.
+- **○ Not verifiable by a scan** — the process and legal duties, named explicitly so nothing looks forgotten: remediation cadence, testing, disclosure, secure updates (Part II (2),(3),(4),(7),(8)), Article 14 reporting, and the Declaration of Conformity (Art 28), CE marking (Art 30), technical file (Annex VII — which your SBOM is a required element of), and product classification (Annex III/IV).
+
+Writes `cra-report.json`. Quoted text is verbatim from the adopted Regulation. **This is an evidence & gap analysis — not a conformity assessment, a declaration of conformity, or legal advice**, and it will never assign your product a CRA class.
+
 ---
 
 ## GitHub Action

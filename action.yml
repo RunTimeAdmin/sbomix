@@ -39,6 +39,10 @@ inputs:
     description: 'Report profile: crypto-agent — adds an Agent Trust Report (MCP tool surface, signing surface, known-bad match) for deployments that hold signing keys'
     required: false
     default: ''
+  cra:
+    description: 'CRA readiness — set to "true" to add an EU Cyber Resilience Act evidence & gap report (cra-report.json)'
+    required: false
+    default: ''
   api-url:
     description: 'SBOMix central API endpoint — push SBOMs for org-wide tracking'
     required: false
@@ -105,6 +109,7 @@ runs:
         SCAN_OUT: ${{ inputs.output-dir }}
         SKIP_VULNS: ${{ inputs.skip-vulns }}
         SCAN_PROFILE: ${{ inputs.profile }}
+        SCAN_CRA: ${{ inputs.cra }}
       run: |
         set -e
 
@@ -112,6 +117,7 @@ runs:
         ARGS="$SCAN_DIR --format $SCAN_FORMAT --aibom-format $SCAN_AIBOM_FORMAT --out $SCAN_OUT"
         [ "$SKIP_VULNS" = "true" ] && ARGS="$ARGS --no-vulns"
         [ -n "$SCAN_PROFILE" ] && ARGS="$ARGS --profile $SCAN_PROFILE"
+        [ "$SCAN_CRA" = "true" ] && ARGS="$ARGS --cra"
 
         $SBOMIX $ARGS --json > /tmp/sbomix-summary.json
 

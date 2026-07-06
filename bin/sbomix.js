@@ -39,6 +39,7 @@ const { explainVulnerabilities } = require('../src/explain');
 const { fetchKEVSet }            = require('../src/kev');
 const { isGitHubTarget, parseGitHubTarget, cloneRepo } = require('../src/github');
 const { buildAgentTrustReport, renderAgentTrustReportHTML } = require('../src/agentTrustReport');
+const { assessCRA, formatCRAReport } = require('../src/cra');
 const pkg = require('../package.json');
 
 const VALID_PROFILES = new Set(['crypto-agent']);
@@ -169,13 +170,16 @@ program
     .option('--format <fmt>',           'Output format: both|cyclonedx|spdx',      'both')
     .option('--aibom-format <fmt>',     'AI-BOM format: json|yaml',                'json')
     .option('--profile <name>',         'Report profile: crypto-agent (adds signing-surface + MCP tool-surface report)')
+    .option('--cra',                    'CRA readiness — plain-language evidence & gap report (EU Cyber Resilience Act)')
     .option('--license-check',          'Flag forbidden/restricted licenses; exit 1 if any found')
     .option('--explain',                'AI remediation advice (requires EXPLAIN_API_KEY; defaults to Claude Haiku)')
     .option('--json',                   'Print summary as JSON (machine-readable)')
     .option('--push',                   'Push SBOM to SBOMix API (requires --api-key or $SBOMIX_API_KEY)')
     .option('--api-key <key>',          'SBOMix API key (or set $SBOMIX_API_KEY)')
     .option('--api-url <url>',          'SBOMix API base URL',                    DEFAULT_API_URL)
-    .action(async (source, opts) => {
+    .action(runScan);
+
+async function runScan(source, opts) {
         let scanDir   = null;
         let cleanup   = null;
         let repoName  = opts.name  || null;
@@ -254,6 +258,12 @@ program
                 agentTrustPaths = { json: jsonPath, html: htmlPath, summary: report.execSummary };
             }
 
+            let craAssessment = null;
+            if (opts.cra) {
+                craAssessment = assessCRA(result, { dir: scanDir });
+                fs.writeFileSync(path.join(outDir, 'cra-report.json'), JSON.stringify(craAssessment, null, 2));
+            }
+
             if (opts.json) {
                 console.log(JSON.stringify({
                     ...stats,
@@ -290,6 +300,12 @@ program
                 }
 
                 console.log(ok(`Quality score  ${stats.qualityScore}/100`));
+
+                // ── CRA readiness report ──────────────────────────────────────
+                if (craAssessment) {
+                    console.log(formatCRAReport(craAssessment, repoName));
+                    console.log(ok(`CRA report     →  ${path.join(outDir, 'cra-report.json')}`));
+                }
 
                 // ── Agent Trust Report (crypto-agent profile) ─────────────────
                 if (agentTrustPaths) {
@@ -454,6 +470,17 @@ program
         } finally {
             if (cleanup) cleanup();
         }
-    });
+}
+
+// ── cra-check subcommand (alias for `<source> --cra`) ─────────────────────────
+program.addCommand(
+    new Command('cra-check')
+        .description('CRA (EU Cyber Resilience Act) readiness — evidence & gap report for a repo or directory')
+        .argument('<source>', 'Local path  OR  owner/repo[@ref]  OR  GitHub URL')
+        .option('-o, --out <dir>', 'Output directory', '.')
+        .option('--token <token>', 'GitHub token for private repos (or set $GITHUB_TOKEN)')
+        .option('--no-vulns',      'Skip OSV vulnerability enrichment')
+        .action((source, opts) => runScan(source, { ...opts, cra: true }))
+);
 
 program.parse();
