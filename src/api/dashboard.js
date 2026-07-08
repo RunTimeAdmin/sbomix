@@ -905,7 +905,7 @@ document.getElementById('scan-repo').addEventListener('keydown', e => {
 
 const PLAN_LABELS = {
   free:     { name: 'Free',     desc: 'Generate SBOMs · 1 app · 7-day history' },
-  starter:  { name: 'Starter',  desc: 'Track your apps · 10 apps · 30-day history' },
+  starter:  { name: 'Hosted',  desc: 'Track your apps · 10 apps · 30-day history' },
   team:     { name: 'Team',     desc: 'Protect every PR · 50 apps · 5 seats · 180-day history' },
   business: { name: 'Business', desc: 'Manage org exposure · 250 apps · 20 seats · 1-year history' },
   enterprise:{ name:'Enterprise',desc:'Governed supply-chain risk at scale' },
@@ -983,7 +983,7 @@ function setBillingCycle(cycle) {
 }
 
 const PLAN_CARD_META = [
-  { plan: 'starter',  label: 'Starter',  monthly: '$19/mo', annual: '$190/yr', save: '' },
+  { plan: 'starter',  label: 'Hosted',  monthly: '$49/mo', annual: '$499/yr', save: '' },
   { plan: 'team',     label: 'Team',     monthly: '$99/mo', annual: '$990/yr', save: 'Most popular' },
   { plan: 'business', label: 'Business', monthly: '$299/mo',annual: '$2,990/yr',save: '' },
 ];
