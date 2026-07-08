@@ -983,7 +983,7 @@ function setBillingCycle(cycle) {
 }
 
 const PLAN_CARD_META = [
-  { plan: 'starter',  label: 'Hosted',  monthly: '$49/mo', annual: '$499/yr', save: '' },
+  { plan: 'starter',  label: 'Hosted',  monthly: '$49/mo', annual: '$490/yr', save: '' },
   { plan: 'team',     label: 'Team',     monthly: '$99/mo', annual: '$990/yr', save: 'Most popular' },
   { plan: 'business', label: 'Business', monthly: '$299/mo',annual: '$2,990/yr',save: '' },
 ];
