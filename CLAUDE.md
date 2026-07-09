@@ -12,13 +12,9 @@ Key paths:
 - `src/api/schema.sql` — canonical DB schema (migrations live in `deploy/`)
 - `bin/` — CLI entrypoints
 - `tests/` — Node built-in test runner
-- `deploy/` — VPS migration scripts (`migrate_NNN_*.sql`)
-
-VPS: `root@76.13.101.31` via ProxyJump through `root@76.13.101.39`. App runs under Docker Compose at `/opt/packrai` (directory kept as-is; DB/user also kept as `packrai`).
+- `deploy/` — database migration scripts (`migrate_NNN_*.sql`)
 
 **Security constraint:** Never store GitHub tokens in the database. The token is passed in memory only.
-
-Both repos (`sbomix-private` and `sbomix`) must stay in sync. Changes go to private first, then mirror to public.
 
 ## 1. Think Before Coding
 
@@ -90,11 +86,7 @@ No TypeScript — plain JS throughout. "Done" for API changes means:
 3. The API container starts cleanly after `docker compose up -d --build api`
 4. The specific endpoint returns the expected response
 
-For schema changes, write a `deploy/migrate_NNN_*.sql` and run it on the VPS via:
-```bash
-ssh -o ProxyJump=root@76.13.101.39 root@76.13.101.31 \
-  "cd /opt/packrai && docker compose exec -T db psql -U packrai -d packrai -f /dev/stdin" < deploy/migrate_NNN_*.sql
-```
+For schema changes, add a `deploy/migrate_NNN_*.sql` and apply it to the database.
 
 ## 6. Loops & Autonomy
 
