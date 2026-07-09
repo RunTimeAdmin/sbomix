@@ -728,8 +728,7 @@ sbomix/
 │       └── schema.sql      Database schema
 ├── deploy/
 │   ├── sbomix-nginx.conf   nginx vhost (HTTP → HTTPS proxy)
-│   ├── push-and-run.sh     Deploy helper script
-│   └── vps-setup.sh        VPS bootstrap script
+│   └── migrate_*.sql        Database migration scripts
 ├── tests/
 │   ├── parsers.test.js     Parser unit tests
 │   └── fixtures/           Sample lock files (all 14 ecosystems)
