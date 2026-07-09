@@ -1,0 +1,30 @@
+version: 2
+updates:
+  # CLI package (repo root)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      cli-dependencies:
+        patterns: ["*"]
+
+  # Hosted API package
+  - package-ecosystem: "npm"
+    directory: "/src/api"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      api-dependencies:
+        patterns: ["*"]
+
+  # GitHub Actions used in workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        patterns: ["*"]
