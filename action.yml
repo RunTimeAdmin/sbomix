@@ -132,8 +132,8 @@ runs:
         SPX="${{ inputs.output-dir }}/bom.spdx.json"
         AIBOM_J="${{ inputs.output-dir }}/aibom.json"
         AIBOM_Y="${{ inputs.output-dir }}/aibom.yaml"
-        [ -f "$CDX" ]     && echo "cyclonedx-path=$CDX"  >> "$GITHUB_OUTPUT"
-        [ -f "$SPX" ]     && echo "spdx-path=$SPX"       >> "$GITHUB_OUTPUT"
+        if [ -f "$CDX" ]; then echo "cyclonedx-path=$CDX" >> "$GITHUB_OUTPUT"; fi
+        if [ -f "$SPX" ]; then echo "spdx-path=$SPX" >> "$GITHUB_OUTPUT"; fi
         if [ -f "$AIBOM_J" ]; then
           echo "aibom-path=$AIBOM_J" >> "$GITHUB_OUTPUT"
         elif [ -f "$AIBOM_Y" ]; then
@@ -142,8 +142,8 @@ runs:
 
         ATR_J="${{ inputs.output-dir }}/agent-trust-report.json"
         ATR_H="${{ inputs.output-dir }}/agent-trust-report.html"
-        [ -f "$ATR_J" ] && echo "agent-trust-report-json-path=$ATR_J" >> "$GITHUB_OUTPUT"
-        [ -f "$ATR_H" ] && echo "agent-trust-report-html-path=$ATR_H" >> "$GITHUB_OUTPUT"
+        if [ -f "$ATR_J" ]; then echo "agent-trust-report-json-path=$ATR_J" >> "$GITHUB_OUTPUT"; fi
+        if [ -f "$ATR_H" ]; then echo "agent-trust-report-html-path=$ATR_H" >> "$GITHUB_OUTPUT"; fi
 
     - name: Push to SBOMix API
       if: inputs.api-url != '' && inputs.api-key != ''
